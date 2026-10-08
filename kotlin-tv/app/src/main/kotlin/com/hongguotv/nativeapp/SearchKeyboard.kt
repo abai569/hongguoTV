@@ -23,7 +23,7 @@ class SearchKeyboard(
     private fun keyRow(): LinearLayout {
         val row=LinearLayout(context).apply { orientation=HORIZONTAL }
         addView(row,LayoutParams(-1,-2))
-        rows+=mutableListOf()
+        rows.add(mutableListOf())
         return row
     }
     private fun addKey(row: LinearLayout,label: String,weight: Float=1f,action: ()->Unit) {
@@ -36,7 +36,7 @@ class SearchKeyboard(
             setOnClickListener { action() }
         }
         row.addView(view,LayoutParams(0,dpi(50),weight).apply { marginEnd=dpi(6); topMargin=dpi(6) })
-        rows.last()+=view
+        rows.last().add(view)
     }
     private fun char(value: Char) {
         if(text.length>=80) return
