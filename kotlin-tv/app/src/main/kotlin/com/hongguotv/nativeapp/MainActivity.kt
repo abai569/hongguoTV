@@ -286,12 +286,10 @@ class MainActivity: Activity() {
     }
     private fun focusSearchInput() {
         val input=searchInput as? EditText ?: return
-        input.post {
-            if(screen=="catalog" && tab==1 && input.isAttachedToWindow) {
-                input.requestFocus()
-                (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT)
-            }
-        }
+        input.post { if(screen=="catalog" && tab==1 && input.isAttachedToWindow) input.requestFocus() }
+    }
+    private fun openSearchKeyboard(input: EditText) {
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT)
     }
     private fun switchContentType(type: ContentType) {
         if(library.contentType==type) return
@@ -354,7 +352,7 @@ class MainActivity: Activity() {
             val scroll=ScrollView(this); val body=column(); scroll.addView(body); container.addView(scroll,lp(-1,0).apply { weight=1f })
             settings(body); if(focusNav) nav[tab].requestFocus(); return
         }
-        if(tab<=1) {
+        if(tab==0) {
             val types=row().apply { setPadding(0,dp(8),0,dp(6)) }
             if(!inlineHomeFilters()) types.addView(text("片库",12f,muted),lp(dp(42),-2))
             ContentType.entries.forEach { type ->
@@ -380,7 +378,7 @@ class MainActivity: Activity() {
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
         if(tab==1) {
-            val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="输入${library.contentType.label}名称或关键词"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
+            val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="请输入剧名或关键词"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
             val left=column(); left.addView(input,lp(-1,dp(45)))
             val search=addButton(left,"搜索") { input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) }
             searchInput=input; searchButton=search
@@ -397,7 +395,9 @@ class MainActivity: Activity() {
             }
             searchRow.addView(left,lp(0,-1).apply { weight=2f; rightMargin=dp(10) })
             searchRow.addView(tvTools.phoneInputPanel { value -> input.setText(value); input.setSelection(input.length()) },lp(0,-1).apply { weight=1f })
-            typeButtons.values.forEach { it.nextFocusDownId=input.id }
+            nav.forEach { it.nextFocusDownId=input.id }
+            input.nextFocusUpId=nav[tab].id
+            input.setOnKeyListener { _,key,event -> if(event.action==KeyEvent.ACTION_UP && (key==KeyEvent.KEYCODE_DPAD_CENTER || key==KeyEvent.KEYCODE_ENTER)) { openSearchKeyboard(input); true } else false }
             input.setOnEditorActionListener { _,_,_-> search.performClick(); true }; container.addView(searchRow)
             if(tab==1 && !nav.any { it.hasFocus() }) focusSearchInput()
         } else if(tab==2) {

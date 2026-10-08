@@ -96,27 +96,39 @@ class TvTools(private val activity: Activity) {
         buttons.first().requestFocus()
     }
     private fun qr(url: String)=ImageView(activity).apply {
-        val bits=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,360,360)
-        val pixels=IntArray(360*360) { i->if(bits[i%360,i/360]) Color.BLACK else Color.WHITE }
-        setImageBitmap(Bitmap.createBitmap(pixels,360,360,Bitmap.Config.ARGB_8888))
+        val size=360
+        val bits=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,size,size)
+        var left=size; var top=size; var right=-1; var bottom=-1
+        for(y in 0 until size) for(x in 0 until size) if(bits[x,y]) { if(x<left) left=x; if(x>right) right=x; if(y<top) top=y; if(y>bottom) bottom=y }
+        val margin=(size/30).coerceAtLeast(8)
+        val x0=(left-margin).coerceAtLeast(0); val y0=(top-margin).coerceAtLeast(0)
+        val x1=(right+margin).coerceAtMost(size-1); val y1=(bottom+margin).coerceAtMost(size-1)
+        val w=x1-x0+1; val h=y1-y0+1
+        val pixels=IntArray(w*h) { index -> val x=x0+index%w; val y=y0+index/w; if(bits[x,y]) Color.BLACK else Color.WHITE }
+        setImageBitmap(Bitmap.createBitmap(pixels,w,h,Bitmap.Config.ARGB_8888))
         contentDescription="二维码"
     }
+    private fun centered(value: String,size: Float=17f)=label(value,size).apply { gravity=Gravity.CENTER; setPadding(dp(4),dp(2),dp(4),dp(2)) }
     fun phoneInputPanel(submit: (String)->Unit): View {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
         val network=connectivity.activeNetwork
         val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
-        val panel=column().apply { gravity=Gravity.CENTER_HORIZONTAL }
+        val panel=column().apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(8),0,dp(8),0) }
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            panel.addView(label("手机与电视需连接同一局域网",14f)); return panel
+            panel.addView(centered("手机与电视需连接同一局域网",14f)); return panel
         }
-        panel.addView(label("手机推送",16f)); val status=label("正在启动…",12f); panel.addView(status)
+        panel.addView(centered("手机推送",16f)); val status=centered("正在启动…",12f); panel.addView(status)
         worker.execute {
             try {
                 val session=PhoneSearchServer(address,onQuery={ query -> main.post { submit(query) } })
                 main.post {
                     if(panel.parent==null) { session.close(); return@post }
-                    phone=session; panel.removeAllViews(); panel.addView(label("手机推送",16f)); panel.addView(qr(session.url),LinearLayout.LayoutParams(dp(180),dp(180))); panel.addView(label("${session.url}\n扫码后只推送剧名",11f))
+                    phone=session; panel.removeAllViews()
+                    panel.addView(centered("手机推送",16f))
+                    panel.addView(qr(session.url),LinearLayout.LayoutParams(dp(180),dp(180)).apply { gravity=Gravity.CENTER_HORIZONTAL })
+                    panel.addView(centered(session.url,12f))
+                    panel.addView(centered("扫码后只推送剧名",11f))
                 }
             } catch(problem: Exception) { main.post { status.text="无法启动：${problem.message.orEmpty()}" } }
         }

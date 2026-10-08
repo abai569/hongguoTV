@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.8.3 优化搜索体验：固定 8787 手机推送剧名，搜索页合并短剧和漫剧结果，历史记录直接显示在搜索框下方。包含 0.8.2 的界面和焦点交互优化。见 [原生版说明与构建](kotlin-tv/README.md)。
+0.8.4 优化搜索页：输入框提示统一为“请输入剧名或关键词”，搜索页去掉漫剧/短剧切换，二维码缩小留白并顶部居中，进入搜索页不再自动弹出输入法，改为按确认键打开。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 
