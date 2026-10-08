@@ -32,7 +32,7 @@ class PhoneSearchServerTest {
     }
     @Test fun `phone form accepts one unicode search without reflecting it in HTML`() {
         val received=CountDownLatch(1); var query=""
-        PhoneSearchServer("127.0.0.1",{ query=it;received.countDown() }).use { server ->
+        PhoneSearchServer("127.0.0.1",{ query=it;received.countDown() },port=0).use { server ->
             val page=request(server)
             assertTrue(page.startsWith("HTTP/1.1 200")); assertTrue(page.contains("Cache-Control: no-store")); assertTrue(page.contains("form-action 'self'"))
             val value="测试 <script>alert(1)</script>"
@@ -44,7 +44,7 @@ class PhoneSearchServerTest {
     }
     @Test fun `wrong token host and cross site posts cannot submit`() {
         var submitted=false
-        PhoneSearchServer("127.0.0.1",{ submitted=true }).use { server ->
+        PhoneSearchServer("127.0.0.1",{ submitted=true },port=0).use { server ->
             assertTrue(request(server,path="/wrong").startsWith("HTTP/1.1 404"))
             assertTrue(request(server,host="evil.example").startsWith("HTTP/1.1 404"))
             assertTrue(request(server,"POST",URI(server.url).path+"submit","query=test","Origin: http://evil.example\r\n").startsWith("HTTP/1.1 403"))
@@ -52,7 +52,7 @@ class PhoneSearchServerTest {
         }
     }
     @Test fun `invalid and oversized input does not consume the session`() {
-        PhoneSearchServer("127.0.0.1",{}).use { server ->
+        PhoneSearchServer("127.0.0.1",{},port=0).use { server ->
             for(body in listOf("query=","query="+"x".repeat(81),"query=a&query=b","query=hello%0Aworld","query=%zz")) {
                 val response=request(server,"POST",URI(server.url).path+"submit",body)
                 assertTrue(response,response.startsWith("HTTP/1.1 400"))
@@ -62,7 +62,7 @@ class PhoneSearchServerTest {
         }
     }
     @Test fun `closing makes a session unreachable`() {
-        val closed=PhoneSearchServer("127.0.0.1",{}); closed.close()
+        val closed=PhoneSearchServer("127.0.0.1",{},port=0); closed.close()
         assertTrue(runCatching { request(closed) }.isFailure)
     }
 }
