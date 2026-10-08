@@ -227,11 +227,14 @@ class ContentRepositoryTest {
         assertEquals(1,requests)
     }
 
-    @Test fun missingComicTabDoesNotFallBackToShortResults() {
+    @Test fun missingComicTabFallsBackToWebsiteSearch() {
         var requests=0
-        val repo=repository { requests++; """{"code":0,"search_tabs":[{"tab_type":11,"data":[]}]}""" }
-        assertThrows(IOException::class.java) { repo.search("修仙",1,ContentType.COMIC) }
-        assertEquals(1,requests)
+        val repo=repository { requests++
+            if(requests==1) """{"code":0,"search_tabs":[{"tab_type":11,"data":[]}]}"""
+            else """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"789","series_name":"测试漫剧"}]}}}};</script>"""
+        }
+        assertEquals("789",repo.search("修仙",1,ContentType.COMIC).items.single().id)
+        assertEquals(2,requests)
     }
 
     @Test fun shortSearchKeepsWebsiteFallback() {
@@ -242,6 +245,17 @@ class ContentRepositoryTest {
             """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"456","series_name":"测试短剧"}]}}}};</script>"""
         }
         assertEquals("456",repo.search("短剧",1,ContentType.SHORT).items.single().id)
+        assertEquals(2,paths.size)
+    }
+
+    @Test fun comicSearchFallsBackToWebsiteWhenAppSearchReturnsEmptyBody() {
+        val paths=mutableListOf<String>()
+        val repo=repository { request ->
+            paths+=request.url.encodedPath
+            if(paths.size==1) ""
+            else """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"789","series_name":"测试漫剧"}]}}}};</script>"""
+        }
+        assertEquals("789",repo.search("漫剧",1,ContentType.COMIC).items.single().id)
         assertEquals(2,paths.size)
     }
 }
