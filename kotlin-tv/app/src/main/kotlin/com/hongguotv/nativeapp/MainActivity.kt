@@ -383,7 +383,7 @@ class MainActivity: Activity() {
             val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="输入${library.contentType.label}名称或关键词"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
             val left=column(); left.addView(input,lp(-1,dp(45)))
             val search=addButton(left,"搜索") { input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) }
-            searchInput=input; searchButton=search; left.addView(search,lp(-1,dp(45)))
+            searchInput=input; searchButton=search
             val history=library.searches()
             if(history.isNotEmpty()) {
                 left.addView(text("搜索历史",13f,muted))
