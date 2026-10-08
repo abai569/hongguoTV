@@ -389,7 +389,7 @@ class MainActivity: Activity() {
                 left.addView(text("搜索历史",13f,muted))
                 val historyRow=row()
                 history.take(6).forEach { item ->
-                    historyRow.addView(addButton(historyRow,"${item.query} · ${item.type.label}") {
+                    historyRow.addView(button("${item.query} · ${item.type.label}") {
                         input.setText(item.query); input.setSelection(input.length())
                     },lp(0,dp(40)).apply { weight=1f })
                 }
