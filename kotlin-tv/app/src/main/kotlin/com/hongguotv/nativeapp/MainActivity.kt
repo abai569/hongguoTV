@@ -135,6 +135,10 @@ class MainActivity: Activity() {
     private val typeButtons=mutableMapOf<ContentType,View>()
     private var searchInput: View?=null
     private var searchButton: View?=null
+    private var searchDraft=""
+    private var searchKeyboard: SearchKeyboard?=null
+    private var searchKeyword: TextView?=null
+    private var hotKeywords: List<String> = emptyList()
     private val searchActions=mutableListOf<View>()
     private var historyManage: View?=null
     private var detail: Detail?=null
@@ -190,6 +194,16 @@ class MainActivity: Activity() {
     private fun addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit): TextView {
         val view=button(label,selected,onClick); parent.addView(view,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8) }); return view
     }
+    private fun addPills(parent: LinearLayout,pills: List<Pair<String,()->Unit>>) {
+        pills.chunked(3).forEach { chunk ->
+            val line=row()
+            chunk.forEach { (label,action) ->
+                val view=button(label,false,action).apply { textSize=14f; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(14),dp(8),dp(14),dp(8)) }
+                line.addView(view,lp(0,dp(44)).apply { weight=1f; rightMargin=dp(8); bottomMargin=dp(6) })
+            }
+            parent.addView(line)
+        }
+    }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -244,7 +258,7 @@ class MainActivity: Activity() {
         catalogScroll?.let { scrollPositions[catalogPageKey]=it.scrollY }
         catalogBody=null
         homeScreen=null; selectionPreview=null; catalogScroll=null
-        nav.clear(); typeButtons.clear(); searchInput=null; searchButton=null; searchActions.clear()
+        nav.clear(); typeButtons.clear(); searchInput=null; searchButton=null; searchActions.clear(); searchKeyboard=null; searchKeyword=null
         historyManage=null; rankRefresh=null; rankSubtitle=null; collectionBack=null; favoriteBadges.clear()
         favoriteStatus=null; favoriteCheck=null; homeUpdates=null; resumeCards.clear()
         catalogCards.clear(); cardImages.clear()
@@ -282,14 +296,7 @@ class MainActivity: Activity() {
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking); tabFocus[tab]=catalogFocus
         tab=next; val saved=tabState[next]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[next].orEmpty()
         showCatalog(load=(next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank())))
-        if(next==1) focusSearchInput()
-    }
-    private fun focusSearchInput() {
-        val input=searchInput as? EditText ?: return
-        input.post { if(screen=="catalog" && tab==1 && input.isAttachedToWindow) input.requestFocus() }
-    }
-    private fun openSearchKeyboard(input: EditText) {
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT)
+        if(next==1) searchKeyboard?.focusFirst()
     }
     private fun switchContentType(type: ContentType) {
         if(library.contentType==type) return
@@ -378,28 +385,29 @@ class MainActivity: Activity() {
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
         if(tab==1) {
-            val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="请输入剧名或关键词"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
-            val left=column(); left.addView(input,lp(-1,dp(45)))
-            val search=addButton(left,"搜索") { input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) }
-            searchInput=input; searchButton=search
+            if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
+            if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(12)
+            val area=row()
+            val left=column()
+            val keyword=text("关键字：${searchDraft.ifBlank { "…" }}",24f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(6),0,0,dp(10)) }
+            searchKeyword=keyword; left.addView(keyword)
+            lateinit var keyboard: SearchKeyboard
+            keyboard=SearchKeyboard(this,onChange={ value -> searchDraft=value; keyword.text="关键字：${value.ifBlank { "…" }}" },onSearch={ if(searchDraft.isNotBlank()) runSearch(searchDraft) })
+            keyboard.setText(searchDraft); searchKeyboard=keyboard; searchButton=null
+            left.addView(keyboard)
+            area.addView(left,lp(0,-1).apply { weight=1.2f; rightMargin=dp(24) })
+            val right=column()
             val history=library.searches()
-            if(history.isNotEmpty()) {
-                left.addView(text("搜索历史",13f,muted))
-                val historyRow=row()
-                history.take(6).forEach { item ->
-                    historyRow.addView(button("${item.query} · ${item.type.label}") {
-                        input.setText(item.query); input.setSelection(input.length())
-                    },lp(0,dp(40)).apply { weight=1f })
-                }
-                left.addView(historyRow)
-            }
-            searchRow.addView(left,lp(0,-1).apply { weight=2f; rightMargin=dp(10) })
-            searchRow.addView(tvTools.phoneInputPanel { value -> input.setText(value); input.setSelection(input.length()) },lp(0,-1).apply { weight=1f })
-            nav.forEach { it.nextFocusDownId=input.id }
-            input.nextFocusUpId=nav[tab].id
-            input.setOnKeyListener { _,key,event -> if(event.action==KeyEvent.ACTION_UP && (key==KeyEvent.KEYCODE_DPAD_CENTER || key==KeyEvent.KEYCODE_ENTER)) { openSearchKeyboard(input); true } else false }
-            input.setOnEditorActionListener { _,_,_-> search.performClick(); true }; container.addView(searchRow)
-            if(tab==1 && !nav.any { it.hasFocus() }) focusSearchInput()
+            right.addView(text("历史",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
+            if(history.isEmpty()) right.addView(text("暂无搜索历史",13f,muted)) else addPills(right,history.take(12).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
+            right.addView(text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) })
+            if(hotKeywords.isEmpty()) right.addView(text("暂无推荐",13f,muted)) else addPills(right,hotKeywords.take(12).map { it to { searchDraft=it; keyboard.setText(it); runSearch(it) } })
+            lateinit var phone: TextView
+            phone=addButton(right,"手机推送") { tvTools.phoneInput(phone) { value -> searchDraft=value; keyboard.setText(value) } }
+            area.addView(right,lp(0,-1).apply { weight=1f })
+            container.addView(area)
+            nav.forEach { it.nextFocusDownId=keyboard.firstKeyId }
+            if(!nav.any { it.hasFocus() }) keyboard.focusFirst()
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text("漫剧热播榜",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })

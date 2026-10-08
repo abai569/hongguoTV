@@ -109,56 +109,30 @@ class TvTools(private val activity: Activity) {
         contentDescription="二维码"
     }
     private fun centered(value: String,size: Float=17f)=label(value,size).apply { gravity=Gravity.CENTER; setPadding(dp(4),dp(2),dp(4),dp(2)) }
-    fun phoneInputPanel(submit: (String)->Unit): View {
-        val connectivity=activity.getSystemService(ConnectivityManager::class.java)
-        val network=connectivity.activeNetwork
-        val capabilities=connectivity.getNetworkCapabilities(network)
-        val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
-        val panel=column().apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(8),0,dp(8),0) }
-        if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            panel.addView(centered("手机与电视需连接同一局域网",14f)); return panel
-        }
-        panel.addView(centered("手机推送",16f)); val status=centered("正在启动…",12f); panel.addView(status)
-        worker.execute {
-            try {
-                val session=PhoneSearchServer(address,onQuery={ query -> main.post { submit(query) } })
-                main.post {
-                    if(panel.parent==null) { session.close(); return@post }
-                    phone=session; panel.removeAllViews()
-                    panel.addView(centered("手机推送",16f))
-                    panel.addView(qr(session.url),LinearLayout.LayoutParams(dp(180),dp(180)).apply { gravity=Gravity.CENTER_HORIZONTAL })
-                    panel.addView(centered(session.url,12f))
-                    panel.addView(centered("扫码后只推送剧名",11f))
-                }
-            } catch(problem: Exception) { main.post { status.text="无法启动：${problem.message.orEmpty()}" } }
-        }
-        return panel
-    }
     fun phoneInput(anchor: View?,submit: (String)->Unit) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
         val network=connectivity.activeNetwork
         val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
-            info("手机输入","请让电视和手机连接同一局域网（Wi-Fi 或有线网络）后重试。",anchor); return
+            info("手机推送","请让电视和手机连接同一局域网（Wi-Fi 或有线网络）后重试。",anchor); return
         }
-        val content=column(); val status=label("正在生成二维码…"); content.addView(status)
-        val next=AlertDialog.Builder(activity).setTitle("手机输入剧名").setView(content).setNegativeButton("关闭",null).create()
+        val content=column().apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(16),dp(8),dp(16),dp(8)) }
+        content.addView(centered("正在生成二维码…"))
+        val next=AlertDialog.Builder(activity).setTitle("手机推送剧名").setView(content).setNegativeButton("关闭",null).create()
         open(next,anchor)
         worker.execute {
             try {
-                val session=PhoneSearchServer(address,{ query -> main.post { if(dialog===next) { next.dismiss(); submit(query) } } },{ main.post { if(dialog===next) { content.removeAllViews(); content.addView(label("二维码已过期，请关闭后重新打开。")) } } })
+                val session=PhoneSearchServer(address,onQuery={ query -> main.post { if(dialog===next) submit(query) } })
                 main.post {
                     if(dialog!==next) { session.close(); return@post }
                     phone=session; content.removeAllViews()
-                    val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
-                    row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
-                    val instructions=column()
-                    instructions.addView(label("手机扫码后用浏览器打开，输入剧名发送到电视。\n需连接同一局域网；关闭窗口即失效，最长 5 分钟。",16f))
-                    instructions.addView(label(session.url,12f))
-                    row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
+                    content.addView(qr(session.url),LinearLayout.LayoutParams(dp(200),dp(200)).apply { gravity=Gravity.CENTER_HORIZONTAL })
+                    content.addView(centered("使用手机扫描二维码，或于浏览器访问地址",16f))
+                    content.addView(centered(session.url,16f))
+                    content.addView(centered("扫码后只推送剧名",12f))
                 }
-            } catch(_: Exception) { main.post { if(dialog===next) status.text="无法开启手机输入，请检查网络后重试。" } }
+            } catch(_: Exception) { main.post { if(dialog===next) content.removeAllViews().also { content.addView(centered("无法开启手机推送，请检查网络后重试。",15f)) } } }
         }
     }
     fun libraryTransfer(backup: String,anchor: View?,restore: (BackupData,Boolean)->Unit) {
