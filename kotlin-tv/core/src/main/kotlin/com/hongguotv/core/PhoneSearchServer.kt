@@ -9,25 +9,20 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
-import java.security.SecureRandom
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
-/** A one-use, short-lived LAN form. No cookies, platform credentials or external resources. */
+/** A persistent LAN form for sending search titles to the TV. */
 class PhoneSearchServer(
     address: String,
     private val onQuery: (String)->Unit,
     private val onExpired: ()->Unit = {},
-    ttlMillis: Long = 300_000
+    private val port: Int = 8787
 ): Closeable {
-    private val stopped=AtomicBoolean(false)
-    private val consumed=AtomicBoolean(false)
+    private val stopped=java.util.concurrent.atomic.AtomicBoolean(false)
     private val localAddress=InetAddress.getByName(address).also { require(it.isLoopbackAddress || it.isSiteLocalAddress) }.hostAddress
-    private val listener=ServerSocket(0,4).apply { soTimeout=500 }
-    private val deadline=System.nanoTime()+ttlMillis.coerceIn(1,300_000)*1_000_000
-    private val token=ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) }
+    private val listener=ServerSocket(port,4).apply { soTimeout=500 }
     private val host="$localAddress:${listener.localPort}"
-    val url="http://$host/$token"
+    val url="http://$host/"
     private val thread=Thread({ serve() },"hongguotv-phone-input").apply { isDaemon=true }
     init {
         thread.start()
@@ -35,7 +30,7 @@ class PhoneSearchServer(
     override fun close() { stopped.set(true); runCatching { listener.close() } }
     private fun serve() {
         try {
-            while(!stopped.get() && System.nanoTime()<deadline) {
+            while(!stopped.get()) {
                 val client=try { listener.accept() } catch(_: SocketTimeoutException) { continue }
                 client.use { socket ->
                     socket.soTimeout=2000
@@ -44,9 +39,8 @@ class PhoneSearchServer(
             }
         } catch(_: Exception) { /* Closing the dialog interrupts accept(). */ }
         finally {
-            val expired=!stopped.get() && !consumed.get()
             close()
-            if(expired) onExpired()
+            if(!stopped.get()) onExpired()
         }
     }
     private fun line(input: InputStream, max: Int): String {
@@ -74,12 +68,12 @@ class PhoneSearchServer(
             val key=next.substring(0,at).lowercase(Locale.ROOT)
             if(headers.put(key,next.substring(at+1).trim())!=null) return respond(socket,400,"重复请求头")
         }
-        if(stopped.get() || consumed.get() || System.nanoTime()>=deadline) return respond(socket,410,"二维码已失效，请在电视上重新打开手机输入")
-        if(headers["host"]!=host || request[1] !in listOf("/$token","/$token/submit")) return respond(socket,404,"页面不存在")
-        if(request[0]=="GET" && request[1]=="/$token") {
-            return respond(socket,200,"""<h1>在电视上搜索</h1><p>输入剧名，电视会按当前选择的漫剧或短剧分类搜索。</p><form method="post" action="/$token/submit"><input name="query" maxlength="80" required autofocus placeholder="输入剧名或关键词" autocomplete="off"><button>发送到电视</button></form><p>页面仅在电视的手机输入窗口打开期间有效，最长 5 分钟。</p>""")
+        if(stopped.get()) return respond(socket,410,"手机输入已关闭")
+        if(headers["host"]!=host || request[1] !in listOf("/","/submit")) return respond(socket,404,"页面不存在")
+        if(request[0]=="GET" && request[1]=="/") {
+            return respond(socket,200,"""<h1>发送剧名到电视</h1><p>输入剧名，返回电视后选择搜索。</p><form method="post" action="/submit"><input name="query" maxlength="80" required autofocus placeholder="输入剧名或关键词" autocomplete="off"><button>发送到电视</button></form>""")
         }
-        if(request[0]!="POST" || request[1]!="/$token/submit") return respond(socket,405,"不支持的操作")
+        if(request[0]!="POST" || request[1]!="/submit") return respond(socket,405,"不支持的操作")
         if(headers["origin"]!=null && headers["origin"]!="http://$host") return respond(socket,403,"来源不匹配")
         if(headers.containsKey("transfer-encoding") || headers["content-type"]?.substringBefore(';')!="application/x-www-form-urlencoded") return respond(socket,400,"请求格式错误")
         val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 1..4096 } ?: return respond(socket,413,"输入内容过长")
@@ -89,13 +83,12 @@ class PhoneSearchServer(
         if(fields.size!=1 || fields[0].size!=2 || fields[0][0]!="query") return respond(socket,400,"请填写剧名")
         val query=runCatching { URLDecoder.decode(fields[0][1],"UTF-8").trim() }.getOrNull()
         if(query.isNullOrBlank() || query.length>80 || query.any { it.isISOControl() }) return respond(socket,400,"请输入 1—80 个字符的剧名")
-        if(stopped.get() || System.nanoTime()>=deadline || !consumed.compareAndSet(false,true)) return respond(socket,410,"二维码已失效")
-        try { respond(socket,200,"<h1>已发送到电视</h1><p>请回到电视查看搜索结果。</p>") }
-        finally { close(); onQuery(query) }
+        respond(socket,200,"<h1>已发送到电视</h1><p>可以继续发送下一个剧名。</p>")
+        onQuery(query)
     }
     private fun respond(socket: Socket, code: Int, message: String) {
         val body="""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>红果 TV · 手机输入</title><style>body{font:18px sans-serif;background:#10131b;color:#f4f5f8;max-width:500px;margin:40px auto;padding:20px}input,button{box-sizing:border-box;width:100%;font:inherit;padding:16px;margin:10px 0;border-radius:8px}button{background:#ff634c;color:white;border:0}p{line-height:1.6}</style></head><body>$message</body></html>""".toByteArray(Charsets.UTF_8)
-        val header="HTTP/1.1 $code Response\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'\r\n\r\n"
+        val header="HTTP/1.1 $code Response\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\nCache-Control: no-store\r\nReferrer-Policy: same-origin\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'\r\n\r\n"
         socket.getOutputStream().apply { write(header.toByteArray(Charsets.US_ASCII)); write(body); flush() }
     }
 }

@@ -18,16 +18,28 @@ class PhoneSearchServerTest {
             socket.getInputStream().readBytes().toString(Charsets.UTF_8)
         }
     }
+
+    @Test fun `phone input uses fixed port and accepts repeated root submissions`() {
+        val received=mutableListOf<String>()
+        PhoneSearchServer("127.0.0.1",onQuery={ received+=it },port=8787).use { server ->
+            assertEquals(8787,URI(server.url).port)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+            assertTrue(request(server,"POST",URI(server.url).path+"submit","query=first").startsWith("HTTP/1.1 200"))
+            assertTrue(request(server,"POST",URI(server.url).path+"submit","query=second").startsWith("HTTP/1.1 200"))
+            Thread.sleep(50)
+            assertEquals(listOf("first","second"),received)
+        }
+    }
     @Test fun `phone form accepts one unicode search without reflecting it in HTML`() {
         val received=CountDownLatch(1); var query=""
         PhoneSearchServer("127.0.0.1",{ query=it;received.countDown() }).use { server ->
             val page=request(server)
             assertTrue(page.startsWith("HTTP/1.1 200")); assertTrue(page.contains("Cache-Control: no-store")); assertTrue(page.contains("form-action 'self'"))
             val value="测试 <script>alert(1)</script>"
-            val reply=request(server,"POST",URI(server.url).path+"/submit","query="+URLEncoder.encode(value,"UTF-8"))
+            val reply=request(server,"POST",URI(server.url).path+"submit","query="+URLEncoder.encode(value,"UTF-8"))
             assertTrue(reply.startsWith("HTTP/1.1 200")); assertFalse(reply.contains(value))
             assertTrue(received.await(2,TimeUnit.SECONDS)); assertEquals(value,query)
-            assertTrue(runCatching { request(server) }.isFailure)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
         }
     }
     @Test fun `wrong token host and cross site posts cannot submit`() {
@@ -35,27 +47,22 @@ class PhoneSearchServerTest {
         PhoneSearchServer("127.0.0.1",{ submitted=true }).use { server ->
             assertTrue(request(server,path="/wrong").startsWith("HTTP/1.1 404"))
             assertTrue(request(server,host="evil.example").startsWith("HTTP/1.1 404"))
-            assertTrue(request(server,"POST",URI(server.url).path+"/submit","query=test","Origin: http://evil.example\r\n").startsWith("HTTP/1.1 403"))
+            assertTrue(request(server,"POST",URI(server.url).path+"submit","query=test","Origin: http://evil.example\r\n").startsWith("HTTP/1.1 403"))
             assertFalse(submitted)
         }
     }
     @Test fun `invalid and oversized input does not consume the session`() {
         PhoneSearchServer("127.0.0.1",{}).use { server ->
             for(body in listOf("query=","query="+"x".repeat(81),"query=a&query=b","query=hello%0Aworld","query=%zz")) {
-                val response=request(server,"POST",URI(server.url).path+"/submit",body)
+                val response=request(server,"POST",URI(server.url).path+"submit",body)
                 assertTrue(response,response.startsWith("HTTP/1.1 400"))
             }
-            assertTrue(request(server,"POST",URI(server.url).path+"/submit","query="+"x".repeat(4096)).startsWith("HTTP/1.1 413"))
+            assertTrue(request(server,"POST",URI(server.url).path+"submit","query="+"x".repeat(4096)).startsWith("HTTP/1.1 413"))
             assertTrue(request(server).startsWith("HTTP/1.1 200"))
         }
     }
-    @Test fun `closing or expiry makes a session unreachable`() {
+    @Test fun `closing makes a session unreachable`() {
         val closed=PhoneSearchServer("127.0.0.1",{}); closed.close()
         assertTrue(runCatching { request(closed) }.isFailure)
-        val expired=CountDownLatch(1)
-        PhoneSearchServer("127.0.0.1",{ fail("expired session submitted") },{ expired.countDown() },1).use { server ->
-            assertTrue(expired.await(2,TimeUnit.SECONDS))
-            assertTrue(runCatching { request(server) }.isFailure)
-        }
     }
 }

@@ -38,6 +38,7 @@ class TvTools(private val activity: Activity) {
         next.show()
     }
     fun close() { dialog?.dismiss(); phone?.close(); phone=null }
+    fun closePhoneInput() { phone?.close(); phone=null }
     fun destroy() { close(); worker.shutdownNow() }
     fun info(title: String,message: String,anchor: View?) = open(AlertDialog.Builder(activity).setTitle(title).setMessage(message).setPositiveButton("知道了",null).create(),anchor)
     fun confirm(title: String,message: String,anchor: View?,action: ()->Unit) {
@@ -99,6 +100,27 @@ class TvTools(private val activity: Activity) {
         val pixels=IntArray(360*360) { i->if(bits[i%360,i/360]) Color.BLACK else Color.WHITE }
         setImageBitmap(Bitmap.createBitmap(pixels,360,360,Bitmap.Config.ARGB_8888))
         contentDescription="二维码"
+    }
+    fun phoneInputPanel(submit: (String)->Unit): View {
+        val connectivity=activity.getSystemService(ConnectivityManager::class.java)
+        val network=connectivity.activeNetwork
+        val capabilities=connectivity.getNetworkCapabilities(network)
+        val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
+        val panel=column().apply { gravity=Gravity.CENTER_HORIZONTAL }
+        if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
+            panel.addView(label("手机与电视需连接同一局域网",14f)); return panel
+        }
+        panel.addView(label("手机推送",16f)); val status=label("正在启动…",12f); panel.addView(status)
+        worker.execute {
+            try {
+                val session=PhoneSearchServer(address,onQuery={ query -> main.post { submit(query) } })
+                main.post {
+                    if(panel.parent==null) { session.close(); return@post }
+                    phone=session; panel.removeAllViews(); panel.addView(label("手机推送",16f)); panel.addView(qr(session.url),LinearLayout.LayoutParams(dp(180),dp(180))); panel.addView(label("${session.url}\n扫码后只推送剧名",11f))
+                }
+            } catch(problem: Exception) { main.post { status.text="无法启动：${problem.message.orEmpty()}" } }
+        }
+        return panel
     }
     fun phoneInput(anchor: View?,submit: (String)->Unit) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)

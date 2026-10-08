@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.8.2 优化 TV 界面和遥控器交互：应用名称改为“红果TV”，重绘图标，导航和搜索类型支持焦点即切换，进入搜索自动唤起输入法。包含 0.8.1 的搜索回退修复。见 [原生版说明与构建](kotlin-tv/README.md)。
+0.8.3 优化搜索体验：固定 8787 手机推送剧名，搜索页合并短剧和漫剧结果，历史记录直接显示在搜索框下方。包含 0.8.2 的界面和焦点交互优化。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 

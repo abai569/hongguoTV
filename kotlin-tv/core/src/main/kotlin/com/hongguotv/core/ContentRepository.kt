@@ -116,6 +116,13 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         }
         return CatalogPage(valid(list),tab.optBoolean("has_more",false) && page<100)
     }
+    fun searchAll(keyword: String, page: Int = 1): CatalogPage {
+        val short=runCatching { search(keyword,page,ContentType.SHORT) }.getOrElse { CatalogPage(emptyList(),false) }
+        val comic=runCatching { search(keyword,page,ContentType.COMIC) }.getOrElse { CatalogPage(emptyList(),false) }
+        val items=(short.items+comic.items).distinctBy { it.id }
+        if(items.isEmpty() && !short.hasMore && !comic.hasMore) throw IOException("Search unavailable")
+        return CatalogPage(items,short.hasMore || comic.hasMore)
+    }
     fun detail(id: String): Detail {
         require(id.matches(Regex("[0-9]{1,30}")))
         val o=router("$site/detail?series_id=$id").optJSONObject("detail_page")?.optJSONObject("seriesDetail") ?: throw IOException("剧集详情暂不可用")

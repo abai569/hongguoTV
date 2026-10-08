@@ -239,6 +239,7 @@ class MainActivity: Activity() {
         generation++; cancelWork(); artwork.cancelPage()
     }
     private fun releaseCatalogViews() {
+        tvTools.closePhoneInput()
         homeScreen?.let { homePosition=it.capturePosition() }
         catalogScroll?.let { scrollPositions[catalogPageKey]=it.scrollY }
         catalogBody=null
@@ -380,16 +381,24 @@ class MainActivity: Activity() {
         }
         if(tab==1) {
             val searchRow=row(); val input=EditText(this).apply { id=View.generateViewId(); hint="输入${library.contentType.label}名称或关键词"; setText(query); textSize=16f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1; filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH }
-            searchRow.addView(input,lp(0,dp(45)).apply { weight=1f; rightMargin=dp(10) })
-            fun search() { val next=input.text.toString().trim(); if(next.isBlank()) { input.requestFocus(); return }; runSearch(next) }
-            searchInput=input; searchButton=addButton(searchRow,"搜索") { search() }; input.nextFocusUpId=typeButtons.getValue(library.contentType).id; searchButton?.nextFocusUpId=input.nextFocusUpId
-            lateinit var recent: TextView
-            recent=addButton(searchRow,"历史") { showSearchHistory(recent) }; recent.nextFocusUpId=input.nextFocusUpId
-            lateinit var phone: TextView
-            phone=addButton(searchRow,"手机输入") { (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken,0); tvTools.phoneInput(phone) { runSearch(it) } }; phone.nextFocusUpId=input.nextFocusUpId
-            searchActions.addAll(listOf(recent,phone))
+            val left=column(); left.addView(input,lp(-1,dp(45)))
+            val search=addButton(left,"搜索") { input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) }
+            searchInput=input; searchButton=search; left.addView(search,lp(-1,dp(45)))
+            val history=library.searches()
+            if(history.isNotEmpty()) {
+                left.addView(text("搜索历史",13f,muted))
+                val historyRow=row()
+                history.take(6).forEach { item ->
+                    historyRow.addView(addButton(historyRow,"${item.query} · ${item.type.label}") {
+                        input.setText(item.query); input.setSelection(input.length())
+                    },lp(0,dp(40)).apply { weight=1f })
+                }
+                left.addView(historyRow)
+            }
+            searchRow.addView(left,lp(0,-1).apply { weight=2f; rightMargin=dp(10) })
+            searchRow.addView(tvTools.phoneInputPanel { value -> input.setText(value); input.setSelection(input.length()) },lp(0,-1).apply { weight=1f })
             typeButtons.values.forEach { it.nextFocusDownId=input.id }
-            input.setOnEditorActionListener { _,_,_-> search(); true }; container.addView(searchRow)
+            input.setOnEditorActionListener { _,_,_-> search.performClick(); true }; container.addView(searchRow)
             if(tab==1 && !nav.any { it.hasFocus() }) focusSearchInput()
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
@@ -428,7 +437,7 @@ class MainActivity: Activity() {
             else { message(body,"正在加载…"); if(focusType) typeButtons[library.contentType]?.requestFocus() else nav[tab].requestFocus() }
             val requestTab=tab; val requestPage=page; val requestQuery=query; val requestType=library.contentType
             work({
-                val result=when(requestTab) { 0 -> repository.home(requestPage,requestType); 2 -> repository.comicRanking(requestPage); else -> repository.search(requestQuery,requestPage,requestType) }
+                    val result=when(requestTab) { 0 -> repository.home(requestPage,requestType); 2 -> repository.comicRanking(requestPage); 1 -> repository.searchAll(requestQuery,requestPage); else -> repository.search(requestQuery,requestPage,requestType) }
                 result
             }, { result ->
                 if(requestTab==0 && requestPage==1) library.cacheHome(requestType,result.items,result.hasMore)
