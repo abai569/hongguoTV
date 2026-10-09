@@ -372,6 +372,7 @@ class MainActivity: Activity() {
             catalog=cached?.items ?: emptyList(); hasMore=cached?.hasMore ?: false; ranking=null; homeFromCache=cached!=null
         }
         invalidatePage(); screen="catalog"; releaseCatalogViews(); val container=base()
+        nav.clear(); typeButtons.clear(); searchActions.clear(); resumeCards.clear(); catalogCards.clear(); cardImages.clear(); favoriteBadges.clear()
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val top=row().apply { setPadding(0,0,0,dp(8)) }
         val brand=row()
@@ -477,6 +478,7 @@ class MainActivity: Activity() {
             keyboard.setText(searchDraft)
             val rightTarget=historyFlow?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
             keyboard.linkRight(rightTarget)
+            keyboard.linkDown(rightTarget)
             input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard.firstKeyId
             nav.forEach { it.nextFocusDownId=input.id }
         } else if(tab==2) {

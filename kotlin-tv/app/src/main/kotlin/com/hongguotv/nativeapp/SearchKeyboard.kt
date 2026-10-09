@@ -48,6 +48,7 @@ class SearchKeyboard(
     fun value(): String = text
     fun focusFirst() { post { rows.firstOrNull()?.firstOrNull()?.requestFocus() } }
     fun linkRight(targetId: Int) { if(targetId==View.NO_ID) return; rows.forEach { it.lastOrNull()?.nextFocusRightId=targetId } }
+    fun linkDown(targetId: Int) { if(targetId==View.NO_ID) return; rows.lastOrNull()?.forEach { it.nextFocusDownId=targetId } }
 
     init {
         orientation=VERTICAL
