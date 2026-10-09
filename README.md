@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.9.0 优化焦点与手机推送：打开应用或切换标签时焦点停在导航栏；修复手机推送页提交；删除各页面“下一段好故事”“浏览片库”说明。见 [原生版说明与构建](kotlin-tv/README.md)。
+0.9.1 优化首页：未选中剧集时收起初见预览空白区，“刷新热门”移到“热门发现”分区标题右侧。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 
