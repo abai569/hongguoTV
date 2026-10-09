@@ -109,7 +109,7 @@ class TvTools(private val activity: Activity) {
         contentDescription="二维码"
     }
     private fun centered(value: String,size: Float=17f)=label(value,size).apply { gravity=Gravity.CENTER; setPadding(dp(4),dp(2),dp(4),dp(2)) }
-    fun phoneInput(anchor: View?,submit: (String)->Unit) {
+    fun phoneInput(anchor: View?,submit: (String)->Unit,clear: ()->Unit = {}) {
         val connectivity=activity.getSystemService(ConnectivityManager::class.java)
         val network=connectivity.activeNetwork
         val capabilities=connectivity.getNetworkCapabilities(network)
@@ -123,7 +123,7 @@ class TvTools(private val activity: Activity) {
         open(next,anchor)
         worker.execute {
             try {
-                val session=PhoneSearchServer(address,onQuery={ query -> main.post { if(dialog===next) submit(query) } })
+                val session=PhoneSearchServer(address,onQuery={ query -> main.post { if(dialog===next) submit(query) } },onClear={ main.post { if(dialog===next) clear() } })
                 main.post {
                     if(dialog!==next) { session.close(); return@post }
                     phone=session; content.removeAllViews()

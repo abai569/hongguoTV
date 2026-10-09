@@ -403,7 +403,7 @@ class MainActivity: Activity() {
             right.addView(text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) })
             if(hotKeywords.isEmpty()) right.addView(text("暂无推荐",13f,muted)) else addPills(right,hotKeywords.take(12).map { it to { searchDraft=it; keyboard.setText(it); runSearch(it) } })
             lateinit var phone: TextView
-            phone=addButton(right,"手机推送") { tvTools.phoneInput(phone) { value -> searchDraft=value; keyboard.setText(value) } }
+            phone=addButton(right,"手机推送") { tvTools.phoneInput(phone,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) }
             area.addView(right,lp(0,-1).apply { weight=1f })
             container.addView(area)
             nav.forEach { it.nextFocusDownId=keyboard.firstKeyId }

@@ -30,6 +30,16 @@ class PhoneSearchServerTest {
             assertEquals(listOf("first","second"),received)
         }
     }
+    @Test fun `phone send returns inline page and clear action clears tv input`() {
+        var cleared=false
+        PhoneSearchServer("127.0.0.1",onQuery={},onClear={ cleared=true },port=0).use { server ->
+            val sent=request(server,"POST",URI(server.url).path+"submit","query=demo")
+            assertTrue(sent.startsWith("HTTP/1.1 200")); assertTrue(sent.contains("发送剧名到电视")); assertTrue(sent.contains("已发送到电视"))
+            val clearedPage=request(server,"POST",URI(server.url).path+"clear","query=")
+            assertTrue(clearedPage.startsWith("HTTP/1.1 200")); assertTrue(clearedPage.contains("已清空电视输入框"))
+            assertTrue(cleared)
+        }
+    }
     @Test fun `phone form accepts one unicode search without reflecting it in HTML`() {
         val received=CountDownLatch(1); var query=""
         PhoneSearchServer("127.0.0.1",{ query=it;received.countDown() },port=0).use { server ->
