@@ -60,9 +60,9 @@ class SearchKeyboard(
             val row=keyRow()
             letters.forEach { letter -> addKey(row,letter.toString()) { char(letter) } }
         }
-        listOf("01234","56789").forEach { digits ->
+        run {
             val row=keyRow()
-            digits.forEach { digit -> addKey(row,digit.toString()) { char(digit) } }
+            "0123456789".forEach { digit -> addKey(row,digit.toString()) { char(digit) } }
         }
         rows.forEachIndexed { rowIndex,row ->
             row.forEachIndexed { column,view ->
