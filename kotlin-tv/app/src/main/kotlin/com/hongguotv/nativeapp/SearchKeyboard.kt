@@ -46,6 +46,7 @@ class SearchKeyboard(
     fun setText(value: String) { text=value.take(80); onChange(text) }
     fun value(): String = text
     fun focusFirst() { post { rows.firstOrNull()?.firstOrNull()?.requestFocus() } }
+    fun linkRight(targetId: Int) { if(targetId==View.NO_ID) return; rows.forEach { it.lastOrNull()?.nextFocusRightId=targetId } }
 
     init {
         orientation=VERTICAL

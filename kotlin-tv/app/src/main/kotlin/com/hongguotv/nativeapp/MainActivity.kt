@@ -439,14 +439,18 @@ class MainActivity: Activity() {
             val right=column(); rightScroll.addView(right)
             val history=library.searches()
             right.addView(text("历史",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
-            if(history.isEmpty()) right.addView(text("暂无搜索历史",13f,muted)) else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
+            val historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
             recommendTitle=text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
             right.addView(recommendTitle)
             val host=column(); recommendHost=host; right.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")
+            right.addView(text("下一段好故事，从这里开始",18f).apply { setPadding(dp(2),dp(18),0,dp(4)) })
+            right.addView(text("浏览片库，选择你想看的剧",13f,muted).apply { setPadding(dp(2),0,0,dp(4)) })
             area.addView(rightScroll,lp(0,-1).apply { weight=1f })
             container.addView(area)
             keyboard.setText(searchDraft)
+            val rightTarget=historyFlow?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
+            keyboard.linkRight(rightTarget)
             nav.forEach { it.nextFocusDownId=keyboard.firstKeyId }
             if(!nav.any { it.hasFocus() }) keyboard.focusFirst()
         } else if(tab==2) {
@@ -532,13 +536,14 @@ class MainActivity: Activity() {
             typeButtons.values.forEach { it.nextFocusDownId=collectionBack!!.id }
         }
         catalogPageKey="$tab:${collection.orEmpty()}:$page:$query"
-        val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
+        val preview=if(tab==1) null else SeriesPreview(this).also { selectionPreview=it; body.addView(it) }
         val scroll=ScrollView(this).apply { isFillViewport=false; isVerticalScrollBarEnabled=false; clipToPadding=false }; catalogScroll=scroll
         val list=column(); scroll.addView(list); body.addView(scroll,lp(-1,0).apply { weight=1f })
         var restoringScroll=true
         val displayed=if(localCatalog()) catalog.drop((page-1)*pageSize).take(pageSize) else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog.take(30)
         if(displayed.isEmpty()) {
-            message(list,if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入关键词，用遥控器确认搜索" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" })
+            val empty=when(tab) { 1 -> if(query.isBlank()) "" else "没有找到相关结果，换个关键词试试"; 3 -> "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" }
+            if(empty.isNotBlank()) message(list,if(loading) "正在加载推荐…" else empty)
             if((tab<=2 || localCatalog()) && page>1) addButton(list,"上一页") { page--; showCatalog(!localCatalog()) }
             if((tab<=2 || localCatalog()) && hasMore) addButton(list,"下一页") { page++; showCatalog(!localCatalog()) }
             if(resumeCards.isNotEmpty()) {
@@ -568,7 +573,7 @@ class MainActivity: Activity() {
                 card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
                 card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
-                card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this,focused); if(focused) { catalogFocus=item.id; loadCover(image,item.cover); preview.show(item,selectionStatus(item)); if(!restoringScroll) scroll.post { scroll.smoothScrollTo(0,when { line.top<scroll.scrollY -> line.top; line.bottom>scroll.scrollY+scroll.height -> (line.bottom-scroll.height).coerceAtLeast(0); else -> scroll.scrollY }) } } }
+                card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this,focused); if(focused) { catalogFocus=item.id; loadCover(image,item.cover); preview?.show(item,selectionStatus(item)); if(!restoringScroll) scroll.post { scroll.smoothScrollTo(0,when { line.top<scroll.scrollY -> line.top; line.bottom>scroll.scrollY+scroll.height -> (line.bottom-scroll.height).coerceAtLeast(0); else -> scroll.scrollY }) } } }
                 // The row measures its tallest card, then stretches siblings to keep badges aligned.
                 line.addView(card,lp(width,-1).apply { if(columnIndex<count-1) rightMargin=gap }); cards+=card
             }
