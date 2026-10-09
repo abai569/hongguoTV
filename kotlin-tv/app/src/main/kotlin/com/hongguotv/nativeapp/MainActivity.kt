@@ -263,7 +263,7 @@ class MainActivity: Activity() {
         library.loadAsync(onFailure={ problem ->
             if(!isDestroyed) { libraryLoadError=problem; if(foreground) showLibraryError(problem) }
         }) {
-            if(!isDestroyed && foreground) { showCatalog(load=true); favoriteMonitor.check() }
+            if(!isDestroyed && foreground) { showCatalog(load=true,focusNav=true); favoriteMonitor.check() }
         }
     }
     private fun base(title: String?=null): LinearLayout {
@@ -334,8 +334,7 @@ class MainActivity: Activity() {
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking); tabFocus[tab]=catalogFocus
         tab=next; val saved=tabState[next]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[next].orEmpty()
-        showCatalog(load=(next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank())))
-        if(next==1) searchKeyboard?.focusFirst()
+        showCatalog(load=(next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank())),focusNav=true)
     }
     private fun switchContentType(type: ContentType) {
         if(library.contentType==type) return
@@ -450,8 +449,6 @@ class MainActivity: Activity() {
             right.addView(recommendTitle)
             val host=column(); recommendHost=host; right.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")
-            right.addView(text("下一段好故事，从这里开始",18f).apply { setPadding(dp(2),dp(18),0,dp(4)) })
-            right.addView(text("浏览片库，选择你想看的剧",13f,muted).apply { setPadding(dp(2),0,0,dp(4)) })
             area.addView(rightScroll,lp(0,-1).apply { weight=1f })
             container.addView(area)
             keyboard.setText(searchDraft)

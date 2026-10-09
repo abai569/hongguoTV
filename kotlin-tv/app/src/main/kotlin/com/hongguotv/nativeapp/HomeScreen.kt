@@ -24,8 +24,8 @@ class SeriesPreview(context: Context): LinearLayout(context) {
         show(null,"")
     }
     fun show(series: Series?,status: String) {
-        val nextTitle=series?.title ?: "下一段好故事，从这里开始"
-        val nextMeta=if(series==null) "浏览片库，选择你想看的剧" else listOf(status,series.badge,series.tags).flatMap { it.split('·') }.map(String::trim).filter { it.isNotBlank() && !it.all(Char::isDigit) }.distinct().joinToString("  /  ")
+        val nextTitle=series?.title.orEmpty()
+        val nextMeta=if(series==null) "" else listOf(status,series.badge,series.tags).flatMap { it.split('·') }.map(String::trim).filter { it.isNotBlank() && !it.all(Char::isDigit) }.distinct().joinToString("  /  ")
         if(title.text.toString()!=nextTitle) title.text=nextTitle
         if(meta.text.toString()!=nextMeta) meta.text=nextMeta
     }
