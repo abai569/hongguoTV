@@ -464,7 +464,7 @@ class MainActivity: Activity() {
                 }
             })
             input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
-            area.addView(left,lp(0,-1).apply { weight=1.0f; rightMargin=dp(24) })
+            area.addView(left,lp(0,-1).apply { weight=0.8f; rightMargin=dp(24) })
             val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
             val right=column(); rightScroll.addView(right)
             val history=library.searches()
