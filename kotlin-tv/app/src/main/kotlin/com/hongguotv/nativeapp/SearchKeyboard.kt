@@ -31,13 +31,13 @@ class SearchKeyboard(
     private fun addKey(row: LinearLayout,label: String,weight: Float=1f,action: ()->Unit) {
         val view=TextView(context).apply {
             id=View.generateViewId(); text=label; gravity=Gravity.CENTER
-            setTextColor(TvStyle.text); textSize=20f; includeFontPadding=false
+            setTextColor(TvStyle.text); textSize=17f; includeFontPadding=false
             background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
             isFocusable=true; isFocusableInTouchMode=true
             setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
             setOnClickListener { action() }
         }
-        row.addView(view,LayoutParams(0,dpi(38),weight).apply { marginEnd=dpi(6); topMargin=dpi(4) })
+        row.addView(view,LayoutParams(0,dpi(32),weight).apply { marginEnd=dpi(6); topMargin=dpi(3) })
         rows.last().add(view)
     }
     private fun char(value: Char) {
