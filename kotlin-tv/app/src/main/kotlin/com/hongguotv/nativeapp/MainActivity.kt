@@ -119,6 +119,7 @@ class MainActivity: Activity() {
     private lateinit var root: FrameLayout
     private var generation=0
     private var screen="catalog"
+    private var lastStreamDebug=""
     private var tab=0
     private var page=1
     private var query=""
@@ -811,6 +812,9 @@ class MainActivity: Activity() {
         }
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
+        setting(device,"调试 · 播放信息") {
+            AlertDialog.Builder(this).setTitle("播放信息").setMessage(lastStreamDebug.ifEmpty { "先播放一集再来看" }).setPositiveButton("关闭",null).show()
+        }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
@@ -959,7 +963,7 @@ class MainActivity: Activity() {
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, { remote ->
+        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()

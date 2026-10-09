@@ -21,7 +21,9 @@ data class Detail(val series: Series, val episodes: List<String>)
 data class RankPosition(val rank: Int?, val heat: String)
 data class ComicRanking(val positions: Map<String,RankPosition>, val totalPages: Int, val updatedText: String)
 data class CatalogPage(val items: List<Series>, val hasMore: Boolean, val ranking: ComicRanking? = null)
-data class StreamInfo(val url: String, val key: ByteArray?, val quality: String)
+data class StreamInfo(val url: String, val key: ByteArray?, val quality: String) {
+    var debugRaw: String = ""
+}
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
@@ -156,7 +158,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
         val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        return StreamInfo(url,key,quality)
+        return StreamInfo(url,key,quality).apply { debugRaw=info.toString() }
     }
     companion object {
         fun extractRouter(html: String): JSONObject {
