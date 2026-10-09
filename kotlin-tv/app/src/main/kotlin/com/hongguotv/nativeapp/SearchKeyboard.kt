@@ -37,7 +37,7 @@ class SearchKeyboard(
             setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
             setOnClickListener { action() }
         }
-        row.addView(view,LayoutParams(0,dpi(50),weight).apply { marginEnd=dpi(6); topMargin=dpi(6) })
+        row.addView(view,LayoutParams(0,dpi(38),weight).apply { marginEnd=dpi(6); topMargin=dpi(4) })
         rows.last().add(view)
     }
     private fun char(value: Char) {

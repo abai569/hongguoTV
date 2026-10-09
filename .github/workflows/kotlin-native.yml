@@ -40,7 +40,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          echo "HONGGUOTV_VERSION_CODE=37" >> "$GITHUB_ENV"
+          echo "HONGGUOTV_VERSION_CODE=38" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$version" >> "$GITHUB_ENV"
           ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintDebug :app:assembleDebug --console=plain
       - name: Prepare tagged APK
