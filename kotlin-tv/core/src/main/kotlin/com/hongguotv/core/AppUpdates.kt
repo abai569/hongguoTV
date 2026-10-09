@@ -17,11 +17,12 @@ import java.util.concurrent.TimeUnit
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
                      val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
-    val downloadUrl get() = "${DOWNLOAD_PROXY}$RELEASES/download/$tag/$fileName"
+    /** Try each proxy in order (for networks where GitHub is slow), then direct GitHub. */
+    val downloadUrls get() = DOWNLOAD_PROXIES.map { "$it$RELEASES/download/$tag/$fileName" } + "$RELEASES/download/$tag/$fileName"
     companion object {
         const val REPOSITORY = "abai569/hongguoTV"
         const val RELEASES = "https://github.com/$REPOSITORY/releases"
-        const val DOWNLOAD_PROXY = "https://ghfast.top/"
+        val DOWNLOAD_PROXIES = listOf("https://ghfast.top/", "https://git-proxy.abai.eu.org/", "https://gh-proxy.com/")
         const val MAX_APK_BYTES = 80L * 1024 * 1024
         fun parse(json: String): AppUpdate {
             val o = JSONObject(json)
@@ -75,18 +76,24 @@ object UpdateFiles {
 }
 
 class AppUpdateRepository : java.io.Closeable {
-    private val http = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
+    private val http = OkHttpClient.Builder().connectTimeout(6, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(5, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
             // Follow GitHub's CDN redirects, never cleartext or arbitrary manifest-provided hosts.
-            if (url.scheme != "https" || url.host !in setOf("ghfast.top", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"))
+            if (url.scheme != "https" || url.host !in setOf("ghfast.top", "git-proxy.abai.eu.org", "gh-proxy.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"))
                 throw IOException("更新下载地址不受支持")
             chain.proceed(chain.request())
         }.build()
     private fun request(url: String) = Request.Builder().url(url).header("User-Agent", "HongguoTV-Updater")
         .header("Cache-Control", "no-cache").build()
     fun latest(): AppUpdate {
-        val call = http.newCall(request("${AppUpdate.DOWNLOAD_PROXY}${AppUpdate.RELEASES}/latest/download/update.json"))
+        for (base in AppUpdate.DOWNLOAD_PROXIES.map { it + AppUpdate.RELEASES } + AppUpdate.RELEASES) {
+            try { return fetch("$base/latest/download/update.json") } catch (_: Exception) {}
+        }
+        throw IOException("无法连接更新服务器，请检查网络后重试")
+    }
+    private fun fetch(url: String): AppUpdate {
+        val call = http.newCall(request(url))
         call.timeout().timeout(25, TimeUnit.SECONDS)
         return call.execute().use { response ->
             if (!response.isSuccessful) throw IOException(if (response.code == 404) "尚无可用的自动更新版本" else "无法检查更新，请稍后重试")
@@ -100,12 +107,18 @@ class AppUpdateRepository : java.io.Closeable {
     }
     fun download(update: AppUpdate, file: File, progress: (Int) -> Unit) {
         if (UpdateFiles.verify(file, update)) return
-        http.newCall(request(update.downloadUrl)).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("安装包下载失败，请稍后重试")
-            val body = response.body ?: throw IOException("安装包为空")
-            if (body.contentLength() >= 0 && body.contentLength() != update.size) throw IOException("安装包长度异常")
-            body.byteStream().use { UpdateFiles.receive(it, file, update, progress) }
+        for (url in update.downloadUrls) {
+            try {
+                http.newCall(request(url)).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("安装包下载失败，请稍后重试")
+                    val body = response.body ?: throw IOException("安装包为空")
+                    if (body.contentLength() >= 0 && body.contentLength() != update.size) throw IOException("安装包长度异常")
+                    body.byteStream().use { UpdateFiles.receive(it, file, update, progress) }
+                }
+                return
+            } catch (_: Exception) {}
         }
+        throw IOException("安装包下载失败，请稍后重试")
     }
     fun cancel() = http.dispatcher.cancelAll()
     override fun close() { cancel(); http.connectionPool.evictAll(); http.dispatcher.executorService.shutdown() }

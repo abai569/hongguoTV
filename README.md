@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.9.6 搜索页微调：键盘只收窄宽度不降低高度，数字恢复两行，功能行把“搜索”放到第一个。见 [原生版说明与构建](kotlin-tv/README.md)。
+0.9.7 更新下载改为多代理依次回退：ghfast.top、git-proxy.abai.eu.org、gh-proxy.com，最后回退直连 GitHub；连接超时缩短，失败提示更清晰。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 
