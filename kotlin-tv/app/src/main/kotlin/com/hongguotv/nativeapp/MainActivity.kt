@@ -215,8 +215,8 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                text=label; textSize=15f; gravity=Gravity.CENTER; maxLines=2
-                setTextColor(TvStyle.text); setPadding(dp(14),dp(10),dp(14),dp(10))
+                text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
+                setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
                 isFocusable=true; isFocusableInTouchMode=true
                 background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
                 setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
@@ -430,7 +430,7 @@ class MainActivity: Activity() {
             nav.forEach { it.nextFocusDownId=edit.id }
         } else if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
-            if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(8)
+            if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(15)
             val area=row()
             val left=column()
             val keywordRow=row().apply { setPadding(dp(2),0,0,dp(10)) }
@@ -464,13 +464,13 @@ class MainActivity: Activity() {
                 }
             })
             input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
-            area.addView(left,lp(0,-1).apply { weight=1.2f; rightMargin=dp(24) })
+            area.addView(left,lp(0,-1).apply { weight=1.0f; rightMargin=dp(24) })
             val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
             val right=column(); rightScroll.addView(right)
             val history=library.searches()
-            right.addView(text("历史",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
+            right.addView(text("历史",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
             val historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard.setText(it.query); runSearch(it.query,it.type) } })
-            recommendTitle=text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
+            recommendTitle=text("热门推荐",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
             right.addView(recommendTitle)
             val host=column(); recommendHost=host; right.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")

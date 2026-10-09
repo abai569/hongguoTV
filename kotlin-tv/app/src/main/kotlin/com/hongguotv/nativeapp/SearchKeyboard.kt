@@ -30,13 +30,13 @@ class SearchKeyboard(
     private fun addKey(row: LinearLayout,label: String,weight: Float=1f,action: ()->Unit) {
         val view=TextView(context).apply {
             id=View.generateViewId(); text=label; gravity=Gravity.CENTER
-            setTextColor(TvStyle.text); textSize=20f; includeFontPadding=false
+            setTextColor(TvStyle.text); textSize=18f; includeFontPadding=false
             background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
             isFocusable=true; isFocusableInTouchMode=true
             setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
             setOnClickListener { action() }
         }
-        row.addView(view,LayoutParams(0,dpi(50),weight).apply { marginEnd=dpi(6); topMargin=dpi(6) })
+        row.addView(view,LayoutParams(0,dpi(42),weight).apply { marginEnd=dpi(6); topMargin=dpi(5) })
         rows.last().add(view)
     }
     private fun char(value: Char) {
@@ -59,7 +59,7 @@ class SearchKeyboard(
             val row=keyRow()
             letters.forEach { letter -> addKey(row,letter.toString()) { char(letter) } }
         }
-        listOf("01234","56789").forEach { digits ->
+        listOf("0123456789").forEach { digits ->
             val row=keyRow()
             digits.forEach { digit -> addKey(row,digit.toString()) { char(digit) } }
         }
