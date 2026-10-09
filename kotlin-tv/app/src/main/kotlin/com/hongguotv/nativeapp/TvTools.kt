@@ -34,11 +34,13 @@ class TvTools(private val activity: Activity) {
     private fun column()=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(16),dp(4),dp(16),dp(8)) }
     private fun open(next: AlertDialog,anchor: View?) {
         dialog?.dismiss(); dialog=next
-        next.setOnDismissListener { if(dialog===next) { phone?.close(); phone=null; dialog=null }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
+        next.setOnDismissListener { if(dialog===next) { phone?.close(); phone=null; dialog=null; releaseKeepScreenOn() }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
         next.show()
     }
-    fun close() { dialog?.dismiss(); phone?.close(); phone=null }
-    fun closePhoneInput() { phone?.close(); phone=null }
+    private fun keepScreenOn() { activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    private fun releaseKeepScreenOn() { activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    fun close() { dialog?.dismiss(); phone?.close(); phone=null; releaseKeepScreenOn() }
+    fun closePhoneInput() { phone?.close(); phone=null; releaseKeepScreenOn() }
     fun destroy() { close(); worker.shutdownNow() }
     fun info(title: String,message: String,anchor: View?) = open(AlertDialog.Builder(activity).setTitle(title).setMessage(message).setPositiveButton("知道了",null).create(),anchor)
     fun confirm(title: String,message: String,anchor: View?,action: ()->Unit) {
@@ -115,7 +117,7 @@ class TvTools(private val activity: Activity) {
         val content=column().apply { gravity=Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(dp(16),dp(8),dp(16),dp(8)) }
         content.addView(centered("正在生成二维码…"))
         val next=AlertDialog.Builder(activity).setTitle("手机推送剧名").setView(content).setNegativeButton("关闭",null).create()
-        open(next,anchor)
+        open(next,anchor); keepScreenOn()
         worker.execute {
             try {
                 val session=PhoneSearchServer(address,onQuery={ query -> main.post { if(dialog===next) submit(query) } },onClear={ main.post { if(dialog===next) clear() } })
@@ -139,7 +141,7 @@ class TvTools(private val activity: Activity) {
         }
         val content=column(); val status=label("正在生成二维码…"); content.addView(status)
         val next=AlertDialog.Builder(activity).setTitle("手机备份与恢复").setView(ScrollView(activity).apply { addView(content) }).setNegativeButton("关闭",null).create()
-        open(next,anchor)
+        open(next,anchor); keepScreenOn()
         worker.execute {
             try {
                 val session=LibraryTransferServer(address,backup,{ data -> main.post {

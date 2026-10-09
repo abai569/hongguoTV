@@ -434,7 +434,7 @@ class MainActivity: Activity() {
             val area=row()
             val left=column()
             val keywordRow=row().apply { setPadding(dp(2),0,0,dp(10)) }
-            keywordRow.addView(text("关键词：",20f,muted))
+            // keywordRow.addView(text("关键词：",20f,muted))
             val input=EditText(this).apply {
                 id=View.generateViewId(); hint="请输入剧名或关键词"; setText(searchDraft); setSelection(text.length)
                 textSize=20f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1
@@ -824,7 +824,7 @@ class MainActivity: Activity() {
         left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right[i].id }
         right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text("红果TV  /  ${BuildConfig.VERSION_NAME}    ·    收藏与进度保存在本机   ·    QQ交流群：1109483648",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text("红果TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun runSearch(value: String,type: ContentType=library.contentType) {
