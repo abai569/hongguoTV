@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.8.7 优化搜索页与图标：放大应用图标，去除搜索页多余提示，把首页标语移入右侧栏，并让遥控可从键盘移动到右侧标签。见 [原生版说明与构建](kotlin-tv/README.md)。
+0.8.8 搜索结果整屏显示：搜索后在独立结果页展示，不再挤在键盘下方的小区域；结果页可返回修改关键词。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 

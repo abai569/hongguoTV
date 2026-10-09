@@ -145,7 +145,7 @@ class MainActivity: Activity() {
     private var suggestGeneration=0
     private val suggestRunnable=object: Runnable {
         override fun run() {
-            if(screen!="catalog" || tab!=1) return
+            if(screen!="catalog" || tab!=1 || query.isNotBlank()) return
             val value=suggestDraft.trim()
             val ticket=++suggestGeneration
             if(value.isEmpty()) { renderSuggestions(emptyList()); return }
@@ -423,7 +423,13 @@ class MainActivity: Activity() {
             }
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
-        if(tab==1) {
+        if(tab==1 && query.isNotBlank()) {
+            val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
+            head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
+            val edit=addButton(head,"修改关键词") { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog() }
+            container.addView(head)
+            nav.forEach { it.nextFocusDownId=edit.id }
+        } else if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
             if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(8)
             val area=row()
