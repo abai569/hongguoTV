@@ -623,8 +623,7 @@ class MainActivity: Activity() {
             cards.forEach { view ->
                 val card=view as LinearLayout
                 val image=card.getChildAt(0)
-                val textHeight=card.paddingTop+card.paddingBottom+(1 until card.childCount).sumOf { card.getChildAt(it).measuredHeight }
-                val target=minOf(((width-dp(8))/TvStyle.POSTER_ASPECT).toInt(),(scroll.height-textHeight-dp(4)).coerceAtLeast(dp(48)))
+                val target=((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
                 if(image.layoutParams.height!=target) image.layoutParams=image.layoutParams.apply { height=target }
             }
             scroll.post settle@{

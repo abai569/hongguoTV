@@ -243,13 +243,8 @@ class HomeScreen(
     private fun fitArtwork() {
         if(height<=0) return
         rows.forEach { row ->
-            val textHeight=row.cards.maxOf { item -> item.view.paddingTop+item.view.paddingBottom+(1 until item.view.childCount).sumOf { child ->
-                val view=item.view.getChildAt(child); val params=view.layoutParams as LayoutParams
-                view.measuredHeight+params.topMargin+params.bottomMargin
-            } }
             val desired=((row.cards.first().view.width-dp(8))/TvStyle.POSTER_ASPECT).toInt()
-            val imageHeight=minOf(desired,(height-row.block.getChildAt(0).measuredHeight-textHeight-dp(8)).coerceAtLeast(dp(48)))
-            row.cards.forEach { card -> card.view.getChildAt(0).let { artwork -> if(artwork.layoutParams.height!=imageHeight) artwork.layoutParams=artwork.layoutParams.apply { height=imageHeight } } }
+            row.cards.forEach { card -> card.view.getChildAt(0).let { artwork -> if(artwork.layoutParams.height!=desired) artwork.layoutParams=artwork.layoutParams.apply { height=desired } } }
         }
     }
     fun firstId()=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: refresh.id
