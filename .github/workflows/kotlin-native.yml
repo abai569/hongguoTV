@@ -22,17 +22,7 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Restore signing keystore from secret
-        env:
-          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_BASE64 }}
-        run: |
-          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-          echo "HONGGUOTV_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
       - name: Unit tests, Android lint, and installable development APK
-        env:
-          HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
-          HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
-          HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/kotlin-v* ]]; then
@@ -40,7 +30,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          echo "HONGGUOTV_VERSION_CODE=30" >> "$GITHUB_ENV"
+          echo "HONGGUOTV_VERSION_CODE=31" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$version" >> "$GITHUB_ENV"
           ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintDebug :app:assembleDebug --console=plain
       - name: Prepare tagged APK
