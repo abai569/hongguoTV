@@ -389,7 +389,7 @@ class MainActivity: Activity() {
             }
             paint(false); item.setOnFocusChangeListener { _,focused ->
                 paint(focused)
-                if(focused && tab!=index) switchTab(index)
+                if(focused && tab!=index) main.post { if(tab!=index) switchTab(index) }
             }; nav+=item
         }
         container.addView(top)
@@ -409,7 +409,7 @@ class MainActivity: Activity() {
                             setTextColor(if(focused) bg else if(library.contentType==type) accent else muted)
                             background=rounded(if(focused) white else if(library.contentType==type) Color.rgb(48,32,29) else Color.TRANSPARENT)
                             setTypeface(null,if(focused || library.contentType==type) Typeface.BOLD else Typeface.NORMAL)
-                            if(focused && library.contentType!=type) switchContentType(type)
+                            if(focused && library.contentType!=type) main.post { if(library.contentType!=type) switchContentType(type) }
                         }
                     }
             }
