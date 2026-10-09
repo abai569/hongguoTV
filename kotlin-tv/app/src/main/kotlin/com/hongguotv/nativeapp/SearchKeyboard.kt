@@ -12,7 +12,8 @@ import android.widget.TextView
 class SearchKeyboard(
     context: Context,
     private val onChange: (String)->Unit,
-    private val onSearch: ()->Unit
+    private val onSearch: ()->Unit,
+    private val onPush: ()->Unit
 ): LinearLayout(context) {
     private val rows=mutableListOf<MutableList<TextView>>()
     private var text=""
@@ -49,9 +50,10 @@ class SearchKeyboard(
     init {
         orientation=VERTICAL
         val functions=keyRow()
-        addKey(functions,"清空",1.4f) { text=""; onChange(text) }
-        addKey(functions,"删除",1.4f) { if(text.isNotEmpty()) { text=text.dropLast(1); onChange(text) } }
-        addKey(functions,"搜索",2f) { onSearch() }
+        addKey(functions,"清空",1.2f) { text=""; onChange(text) }
+        addKey(functions,"删除",1.2f) { if(text.isNotEmpty()) { text=text.dropLast(1); onChange(text) } }
+        addKey(functions,"搜索",1.6f) { onSearch() }
+        addKey(functions,"推送",1.2f) { onPush() }
         listOf("ABCDEFG","HIJKLMN","OPQRSTU","VWXYZ").forEach { letters ->
             val row=keyRow()
             letters.forEach { letter -> addKey(row,letter.toString()) { char(letter) } }
@@ -62,10 +64,10 @@ class SearchKeyboard(
         }
         rows.forEachIndexed { rowIndex,row ->
             row.forEachIndexed { column,view ->
-                view.nextFocusLeftId=row[(column-1).coerceAtLeast(0)].id
-                view.nextFocusRightId=row[(column+1).coerceAtMost(row.lastIndex)].id
-                view.nextFocusUpId=rows.getOrNull(rowIndex-1)?.getOrNull(column)?.id ?: view.id
-                view.nextFocusDownId=rows.getOrNull(rowIndex+1)?.getOrNull(column)?.id ?: view.id
+                if(column>0) view.nextFocusLeftId=row[column-1].id
+                if(column<row.lastIndex) view.nextFocusRightId=row[column+1].id
+                rows.getOrNull(rowIndex-1)?.getOrNull(column)?.let { view.nextFocusUpId=it.id }
+                rows.getOrNull(rowIndex+1)?.getOrNull(column)?.let { view.nextFocusDownId=it.id }
             }
         }
     }

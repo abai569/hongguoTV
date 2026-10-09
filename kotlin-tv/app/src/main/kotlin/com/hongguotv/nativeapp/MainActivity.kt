@@ -139,6 +139,22 @@ class MainActivity: Activity() {
     private var searchKeyboard: SearchKeyboard?=null
     private var searchKeyword: TextView?=null
     private var hotKeywords: List<String> = emptyList()
+    private var recommendTitle: TextView?=null
+    private var recommendHost: LinearLayout?=null
+    private var suggestDraft=""
+    private var suggestGeneration=0
+    private val suggestRunnable=object: Runnable {
+        override fun run() {
+            if(screen!="catalog" || tab!=1) return
+            val value=suggestDraft.trim()
+            val ticket=++suggestGeneration
+            if(value.isEmpty()) { renderSuggestions(emptyList()); return }
+            io.submit {
+                val titles=runCatching { repository.searchAll(value,1).items.map { it.title } }.getOrDefault(emptyList()).take(8)
+                main.post { if(ticket==suggestGeneration && screen=="catalog" && tab==1 && suggestDraft.trim()==value) renderSuggestions(titles) }
+            }
+        }
+    }
     private val searchActions=mutableListOf<View>()
     private var historyManage: View?=null
     private var detail: Detail?=null
@@ -194,15 +210,38 @@ class MainActivity: Activity() {
     private fun addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit): TextView {
         val view=button(label,selected,onClick); parent.addView(view,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8) }); return view
     }
-    private fun addPills(parent: LinearLayout,pills: List<Pair<String,()->Unit>>) {
-        pills.chunked(3).forEach { chunk ->
-            val line=row()
-            chunk.forEach { (label,action) ->
-                val view=button(label,false,action).apply { textSize=14f; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(14),dp(8),dp(14),dp(8)) }
-                line.addView(view,lp(0,dp(44)).apply { weight=1f; rightMargin=dp(8); bottomMargin=dp(6) })
+    private fun addChips(parent: LinearLayout,pills: List<Pair<String,()->Unit>>): FlowLayout {
+        val context=this
+        val flow=FlowLayout(context,dp(8),dp(8))
+        pills.forEach { (label,action) ->
+            val chip=TextView(context).apply {
+                text=label; textSize=15f; gravity=Gravity.CENTER; maxLines=2
+                setTextColor(TvStyle.text); setPadding(dp(14),dp(10),dp(14),dp(10))
+                isFocusable=true; isFocusableInTouchMode=true
+                background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
+                setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
+                setOnClickListener { action() }
             }
-            parent.addView(line)
+            searchKeyboard?.firstKeyId?.takeIf { it!=View.NO_ID }?.let { chip.nextFocusLeftId=it }
+            flow.addView(chip,ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+        parent.addView(flow,lp(-1,-2))
+        return flow
+    }
+    private fun scheduleSuggest(value: String) {
+        suggestDraft=value
+        main.removeCallbacks(suggestRunnable)
+        main.postDelayed(suggestRunnable,250)
+    }
+    private fun fillRecommend(host: LinearLayout,items: List<String>,empty: String) {
+        host.removeAllViews()
+        if(items.isEmpty()) { host.addView(text(empty,13f,muted)); return }
+        addChips(host,items.map { it to { searchDraft=it; searchKeyboard?.setText(it); runSearch(it) } })
+    }
+    private fun renderSuggestions(titles: List<String>) {
+        val host=recommendHost ?: return
+        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; fillRecommend(host,hotKeywords.take(8),"暂无推荐") }
+        else { recommendTitle?.text="建议"; fillRecommend(host,titles,"暂无建议") }
     }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -258,7 +297,7 @@ class MainActivity: Activity() {
         catalogScroll?.let { scrollPositions[catalogPageKey]=it.scrollY }
         catalogBody=null
         homeScreen=null; selectionPreview=null; catalogScroll=null
-        nav.clear(); typeButtons.clear(); searchInput=null; searchButton=null; searchActions.clear(); searchKeyboard=null; searchKeyword=null
+        nav.clear(); typeButtons.clear(); searchInput=null; searchButton=null; searchActions.clear(); searchKeyboard=null; searchKeyword=null; recommendTitle=null; recommendHost=null; main.removeCallbacks(suggestRunnable)
         historyManage=null; rankRefresh=null; rankSubtitle=null; collectionBack=null; favoriteBadges.clear()
         favoriteStatus=null; favoriteCheck=null; homeUpdates=null; resumeCards.clear()
         catalogCards.clear(); cardImages.clear()
@@ -386,26 +425,28 @@ class MainActivity: Activity() {
         }
         if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
-            if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(12)
+            if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(8)
             val area=row()
             val left=column()
             val keyword=text("关键字：${searchDraft.ifBlank { "…" }}",24f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(6),0,0,dp(10)) }
             searchKeyword=keyword; left.addView(keyword)
             lateinit var keyboard: SearchKeyboard
-            keyboard=SearchKeyboard(this,onChange={ value -> searchDraft=value; keyword.text="关键字：${value.ifBlank { "…" }}" },onSearch={ if(searchDraft.isNotBlank()) runSearch(searchDraft) })
-            keyboard.setText(searchDraft); searchKeyboard=keyboard; searchButton=null
+            keyboard=SearchKeyboard(this,onChange={ value -> searchDraft=value; keyword.text="关键字：${value.ifBlank { "…" }}"; scheduleSuggest(value) },onSearch={ if(searchDraft.isNotBlank()) runSearch(searchDraft) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) })
+            searchKeyboard=keyboard; searchButton=null
             left.addView(keyboard)
             area.addView(left,lp(0,-1).apply { weight=1.2f; rightMargin=dp(24) })
-            val right=column()
+            val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
+            val right=column(); rightScroll.addView(right)
             val history=library.searches()
             right.addView(text("历史",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
-            if(history.isEmpty()) right.addView(text("暂无搜索历史",13f,muted)) else addPills(right,history.take(12).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
-            right.addView(text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) })
-            if(hotKeywords.isEmpty()) right.addView(text("暂无推荐",13f,muted)) else addPills(right,hotKeywords.take(12).map { it to { searchDraft=it; keyboard.setText(it); runSearch(it) } })
-            lateinit var phone: TextView
-            phone=addButton(right,"手机推送") { tvTools.phoneInput(phone,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) }
-            area.addView(right,lp(0,-1).apply { weight=1f })
+            if(history.isEmpty()) right.addView(text("暂无搜索历史",13f,muted)) else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
+            recommendTitle=text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
+            right.addView(recommendTitle)
+            val host=column(); recommendHost=host; right.addView(host)
+            fillRecommend(host,hotKeywords,"暂无推荐")
+            area.addView(rightScroll,lp(0,-1).apply { weight=1f })
             container.addView(area)
+            keyboard.setText(searchDraft)
             nav.forEach { it.nextFocusDownId=keyboard.firstKeyId }
             if(!nav.any { it.hasFocus() }) keyboard.focusFirst()
         } else if(tab==2) {
