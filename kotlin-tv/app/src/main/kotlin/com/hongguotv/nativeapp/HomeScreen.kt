@@ -156,7 +156,7 @@ class HomeScreen(
                             lastRow=shelf.key
                         }
                     }
-                    line.addView(view,LayoutParams(width,-1).apply { rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
+                    line.addView(view,LayoutParams(width,-2).apply { rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
                 }
                 lines+=Line(horizontal,lineCards)
             }

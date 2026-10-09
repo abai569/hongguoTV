@@ -546,6 +546,8 @@ class MainActivity: Activity() {
                     if(resumeCards.isNotEmpty()) resumeCards.first().requestFocus()
                 }
             })
+        } else if(tab==1 && query.isBlank()) {
+            // 搜索键盘页：底部 body 保持空，不残留上一次搜索结果
         } else catalogGrid(body,focusNav,focusType)
     }
     private fun catalogGrid(body: LinearLayout,focusNav: Boolean,focusType: Boolean=false,loading: Boolean=false) {
