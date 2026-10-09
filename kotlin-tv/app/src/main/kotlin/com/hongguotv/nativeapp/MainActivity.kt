@@ -425,9 +425,8 @@ class MainActivity: Activity() {
         if(tab==1 && query.isNotBlank()) {
             val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
             head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
-            val edit=addButton(head,"修改关键词") { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog() }
+            head.addView(text("按返回键重新搜索",12f,muted))
             container.addView(head)
-            nav.forEach { it.nextFocusDownId=edit.id }
         } else if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
             if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(15)
@@ -1268,7 +1267,7 @@ class MainActivity: Activity() {
         when(screen) {
             "player" -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> showCatalog()
-            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
+            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog() } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
         }
     }
     @Deprecated("TV remote back is handled through the activity")
