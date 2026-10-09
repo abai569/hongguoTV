@@ -70,7 +70,7 @@ class HomeScreen(
         val key=findFocus()?.tag?.toString()?.takeIf { it in cards || it=="home:refresh" || it=="home:more" } ?: lastFocus
         val row=rows.indexOfFirst { item -> item.cards.any { it.key==key } }
         val column=rows.getOrNull(row)?.cards?.indexOfFirst { it.key==key } ?: 0
-        return Position(key,rows.getOrNull(row)?.key,column.coerceAtLeast(0),row.coerceAtLeast(0),scroll.scrollY,rows.associate { it.key to it.lines.firstOrNull()?.horizontal?.scrollX ?: 0 })
+        return Position(key,rows.getOrNull(row)?.key,column.coerceAtLeast(0),row.coerceAtLeast(0),scroll.scrollY,rows.associate { it.key to (it.lines.firstOrNull()?.horizontal?.scrollX ?: 0) })
     }
 
     /** Rebuild only this bounded shelf area, preserving the old card or its nearest neighbour. */
