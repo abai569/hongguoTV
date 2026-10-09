@@ -813,7 +813,10 @@ class MainActivity: Activity() {
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         val debugBtn=setting(playback,"调试 · 播放信息") {
-            AlertDialog.Builder(this).setTitle("播放信息").setMessage(lastStreamDebug.ifEmpty { "先播放一集再来看" }).setPositiveButton("关闭",null).show()
+            if(lastStreamDebug.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return@setting }
+            val cm=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("stream_debug",lastStreamDebug))
+            Toast.makeText(this,"已复制全部JSON到剪贴板",Toast.LENGTH_LONG).show()
         }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
