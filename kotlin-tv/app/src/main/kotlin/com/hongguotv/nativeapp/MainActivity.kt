@@ -215,6 +215,7 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
+                id=View.generateViewId()
                 text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
                 isFocusable=true; isFocusableInTouchMode=true
