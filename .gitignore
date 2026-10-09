@@ -22,6 +22,7 @@ __pycache__/
 !.env.example
 *.jks
 *.keystore
+!kotlin-tv/signing/hongguotv.jks
 keystore.properties
 
 # Local captures and downloaded media

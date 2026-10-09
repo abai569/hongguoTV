@@ -1340,7 +1340,7 @@ class MainActivity: Activity() {
         player?.pause(); saveProgress(); library.flush(); super.onPause()
     }
     override fun onStop() {
-        restoreStoppedPage=true; generation++; cancelWork(); tvTools.close()
+        restoreStoppedPage=true; generation++; cancelWork(); tvTools.suspend()
         if(screen=="player") { startPosition=currentPosition(); saveProgress(); releasePlayer() }
         artwork.cancelPage(clearMemory=true); library.flush(); super.onStop()
     }

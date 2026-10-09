@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins { id("com.android.application"); kotlin("android") }
 val signingProperties = Properties().apply { val config = rootProject.file("keystore.properties"); if (config.exists()) config.inputStream().use { load(it) } }
+val bundledKeystore = rootProject.file("signing/hongguotv.jks")
 fun signingValue(env: String, key: String): String? = System.getenv(env) ?: signingProperties.getProperty(key)
 
 android {
@@ -11,19 +12,22 @@ android {
         applicationId = "com.hongguotv.nativeapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 26
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "0.9.8"
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 27
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "0.9.9"
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
         create("delivery") {
-            storeFile = signingValue("HONGGUOTV_KEYSTORE", "storeFile")?.let { file(it) }
-            storePassword = signingValue("HONGGUOTV_STORE_PASSWORD", "storePassword")
-            keyAlias = signingValue("HONGGUOTV_KEY_ALIAS", "keyAlias")
-            keyPassword = signingValue("HONGGUOTV_KEY_PASSWORD", "keyPassword")
+            storeFile = signingValue("HONGGUOTV_KEYSTORE", "storeFile")?.let { file(it) } ?: bundledKeystore
+            storePassword = signingValue("HONGGUOTV_STORE_PASSWORD", "storePassword") ?: "hongguotv123"
+            keyAlias = signingValue("HONGGUOTV_KEY_ALIAS", "keyAlias") ?: "hongguotv"
+            keyPassword = signingValue("HONGGUOTV_KEY_PASSWORD", "keyPassword") ?: "hongguotv123"
         }
     }
-    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("delivery"); isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("delivery") }
+        getByName("release") { signingConfig = signingConfigs.getByName("delivery"); isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += setOf("META-INF/versions/**", "META-INF/*.kotlin_module") }

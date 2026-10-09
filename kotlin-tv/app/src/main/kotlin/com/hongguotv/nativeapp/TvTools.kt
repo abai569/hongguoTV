@@ -34,9 +34,12 @@ class TvTools(private val activity: Activity) {
     private fun column()=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(16),dp(4),dp(16),dp(8)) }
     private fun open(next: AlertDialog,anchor: View?) {
         dialog?.dismiss(); dialog=next
-        next.setOnDismissListener { if(dialog===next) { phone?.close(); phone=null; dialog=null; releaseKeepScreenOn() }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
+        next.setOnDismissListener { if(dialog===next) { if(!suspending) { phone?.close(); phone=null; releaseKeepScreenOn() }; dialog=null }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
         next.show()
     }
+    private var suspending=false
+    /** Called on activity stop: hide the dialog but keep any LAN session alive until the user closes it. */
+    fun suspend() { suspending=true; runCatching { dialog?.dismiss() }; dialog=null; suspending=false }
     private fun keepScreenOn() { activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     private fun releaseKeepScreenOn() { activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     fun close() { dialog?.dismiss(); phone?.close(); phone=null; releaseKeepScreenOn() }
@@ -162,14 +165,14 @@ class TvTools(private val activity: Activity) {
                         .setView(ScrollView(activity).apply { addView(preview) }).setNegativeButton("取消",null)
                         .setPositiveButton("合并恢复") { _,_-> restore(data,settings.isChecked) }.create()
                     open(confirm,anchor); confirm.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus()
-                } },{ main.post { if(dialog===next) { content.removeAllViews(); content.addView(label("二维码已过期，请关闭后重新打开。")) } } })
+                } })
                 main.post {
                     if(dialog!==next) { session.close(); return@post }
                     phone=session; content.removeAllViews()
                     val row=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
                     row.addView(qr(session.url),LinearLayout.LayoutParams(dp(185),dp(185)))
                     val instructions=column()
-                    instructions.addView(label("手机扫码，用浏览器下载备份或选择备份文件恢复。\n仅限同一局域网；关闭即失效，最长 5 分钟。恢复需在电视确认。",16f))
+                    instructions.addView(label("手机扫码，用浏览器下载备份或选择备份文件恢复。\n仅限同一局域网；恢复需在电视确认。",16f))
                     instructions.addView(label(session.url,12f)); row.addView(instructions,LinearLayout.LayoutParams(0,-2,1f)); content.addView(row)
                 }
             } catch(_: Exception) { main.post { if(dialog===next) status.text="无法开启备份传输，请检查网络后重试。" } }
