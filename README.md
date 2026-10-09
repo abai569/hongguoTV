@@ -4,7 +4,7 @@
 
 **[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
-0.9.9 固定签名与备份改进：提交固定签名密钥，各版本可覆盖安装；备份改用固定端口 8788、去掉随机 token，下载文件名加时间戳；屏保不再关闭推送/备份服务。见 [原生版说明与构建](kotlin-tv/README.md)。
+1.0.0 搜索与推送修复：搜索结果返回后焦点自动回到清空按钮；热门推荐显示全部；词条按左键逐键左移；推送服务持续可用直到关闭软件；首页热门 3 行 18 个。见 [原生版说明与构建](kotlin-tv/README.md)。
 
 原生工程位于 `kotlin-tv/`，包名 `com.hongguotv.nativeapp`，可与旧版并存。以下为保留的 React Native 版说明。
 

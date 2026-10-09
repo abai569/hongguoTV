@@ -222,7 +222,6 @@ class MainActivity: Activity() {
                 setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
                 setOnClickListener { action() }
             }
-            searchKeyboard?.firstKeyId?.takeIf { it!=View.NO_ID }?.let { chip.nextFocusLeftId=it }
             flow.addView(chip,ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         parent.addView(flow,lp(-1,-2))
@@ -240,7 +239,7 @@ class MainActivity: Activity() {
     }
     private fun renderSuggestions(titles: List<String>) {
         val host=recommendHost ?: return
-        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; fillRecommend(host,hotKeywords.take(8),"暂无推荐") }
+        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; fillRecommend(host,hotKeywords,"暂无推荐") }
         else { recommendTitle?.text="建议"; fillRecommend(host,titles,"暂无建议") }
     }
     override fun onCreate(state: Bundle?) {
@@ -704,8 +703,8 @@ class MainActivity: Activity() {
                 if(updates.size>8) { { showCollection("updates") } } else null),
             HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
                 if(later.size>10) { { showCollection("later") } } else null),
-            HomeScreen.Shelf("hot","热门发现 · ${library.contentType.label}",hot.take(10).map { HomeScreen.Entry(it,it.badge.ifBlank { "查看剧集" }) },
-                if(hot.size>10) { { showCollection("hot") } } else null))
+            HomeScreen.Shelf("hot","热门发现 · ${library.contentType.label}",hot.take(18).map { HomeScreen.Entry(it,it.badge.ifBlank { "查看剧集" }) },
+                if(hot.size>18) { { showCollection("hot") } } else null,6))
     }
     private fun refreshLibraryCards(changedId: String,removed: Boolean=false) {
         if(screen!="catalog") return
@@ -1267,7 +1266,7 @@ class MainActivity: Activity() {
         when(screen) {
             "player" -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> showCatalog()
-            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog() } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
+            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
         }
     }
     @Deprecated("TV remote back is handled through the activity")

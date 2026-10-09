@@ -34,7 +34,7 @@ class TvTools(private val activity: Activity) {
     private fun column()=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(16),dp(4),dp(16),dp(8)) }
     private fun open(next: AlertDialog,anchor: View?) {
         dialog?.dismiss(); dialog=next
-        next.setOnDismissListener { if(dialog===next) { if(!suspending) { phone?.close(); phone=null; releaseKeepScreenOn() }; dialog=null }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
+        next.setOnDismissListener { if(dialog===next) { if(!suspending) { releaseKeepScreenOn() }; dialog=null }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
         next.show()
     }
     private var suspending=false
@@ -131,10 +131,11 @@ class TvTools(private val activity: Activity) {
         open(next,anchor); keepScreenOn()
         worker.execute {
             try {
-                val session=PhoneSearchServer(address,onQuery={ query -> main.post { if(dialog===next) submit(query) } },onClear={ main.post { if(dialog===next) clear() } })
+                val existing=phone as? PhoneSearchServer
+                val session=existing ?: PhoneSearchServer(address,onQuery={ query -> main.post { submit(query) } },onClear={ main.post { clear() } }).also { phone=it }
                 main.post {
                     if(dialog!==next) { session.close(); return@post }
-                    phone=session; content.removeAllViews()
+                    content.removeAllViews()
                     content.addView(qr(session.url),LinearLayout.LayoutParams(dp(200),dp(200)).apply { gravity=Gravity.CENTER_HORIZONTAL })
                     content.addView(centered("使用手机扫描二维码，或于浏览器访问地址",16f))
                     content.addView(centered(session.url,16f))

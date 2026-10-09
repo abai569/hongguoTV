@@ -18,6 +18,7 @@ class SearchKeyboard(
     private val rows=mutableListOf<MutableList<TextView>>()
     private var text=""
     val firstKeyId: Int get()=rows.firstOrNull()?.firstOrNull()?.id ?: View.NO_ID
+    val clearKeyId: Int get()=rows.getOrNull(0)?.getOrNull(1)?.id ?: View.NO_ID
 
     private fun dpi(value: Int)=(value*resources.displayMetrics.density).toInt()
 

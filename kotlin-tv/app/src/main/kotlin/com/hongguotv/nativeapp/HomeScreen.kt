@@ -43,10 +43,11 @@ class HomeScreen(
     private val remember: (String)->Unit
 ): LinearLayout(context) {
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
-    data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null)
+    data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null,val perRow: Int=6)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
     private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
-    private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<Card>)
+    private data class Line(val horizontal: HorizontalScrollView,val cards: List<Card>)
+    private data class Row(val key: String,val block: LinearLayout,val lines: List<Line>,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
     private fun shape(focus: Boolean)=TvStyle.card(context,focus)
@@ -69,7 +70,7 @@ class HomeScreen(
         val key=findFocus()?.tag?.toString()?.takeIf { it in cards || it=="home:refresh" || it=="home:more" } ?: lastFocus
         val row=rows.indexOfFirst { item -> item.cards.any { it.key==key } }
         val column=rows.getOrNull(row)?.cards?.indexOfFirst { it.key==key } ?: 0
-        return Position(key,rows.getOrNull(row)?.key,column.coerceAtLeast(0),row.coerceAtLeast(0),scroll.scrollY,rows.associate { it.key to it.horizontal.scrollX })
+        return Position(key,rows.getOrNull(row)?.key,column.coerceAtLeast(0),row.coerceAtLeast(0),scroll.scrollY,rows.associate { it.key to it.lines.firstOrNull()?.horizontal?.scrollX ?: 0 })
     }
 
     /** Rebuild only this bounded shelf area, preserving the old card or its nearest neighbour. */
@@ -111,43 +112,55 @@ class HomeScreen(
             if(shelf.key=="hot" && !refreshPlaced) { heading.addView(refresh,LayoutParams(-2,-2).apply { leftMargin=dp(8) }); refreshPlaced=true }
             else heading.addView(label("左右选剧  ·  上下切换分区",10f,TvStyle.muted))
             block.addView(heading)
-            val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
-            val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
-            horizontal.addView(line); block.addView(horizontal)
+            val lines=mutableListOf<Line>()
             val rowCards=mutableListOf<Card>()
-            fun addCard(entry: Entry?,moreAction: (() -> Unit)?=null) {
-                val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/6).toInt().coerceAtLeast(dp(100))
-                val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
-                val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=shape(false) }
-                val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
-                view.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
-                val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
-                val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
-                val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
-                view.addView(title); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) })
-                val card=Card(key,view,image,title,badge,progress,entry)
-                view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
-                view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: moreAction?.invoke() }
-                if(entry!=null) {
-                    view.setOnLongClickListener { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) }; true }
-                    view.setOnKeyListener { _,code,event -> if(code==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) } }; true } else false }
-                }
-                view.setOnFocusChangeListener { _,focused ->
-                    view.background=shape(focused)
-                    if(focused) {
-                        lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
-                        if(!restoring) {
-                            loadNearbySelection()
-                            if(lastRow!=shelf.key) scroll.post { if(revision==ticket && view.hasFocus()) reveal(block) }
-                        }
-                        lastRow=shelf.key
+            val perRow=shelf.perRow
+            val entries=shelf.entries
+            val moreAction=shelf.more
+            val totalCount=entries.size+if(moreAction!=null) 1 else 0
+            val rowCount=(totalCount+perRow-1)/perRow
+            val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/perRow).toInt().coerceAtLeast(dp(100))
+            for(rowIndex in 0 until rowCount) {
+                val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
+                val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
+                horizontal.addView(line); block.addView(horizontal)
+                val lineCards=mutableListOf<Card>()
+                for(columnIndex in 0 until perRow) {
+                    val index=rowIndex*perRow+columnIndex
+                    if(index>=totalCount) break
+                    val entry=if(index<entries.size) entries[index] else null
+                    val action=if(index<entries.size) null else moreAction!!
+                    val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
+                    val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=shape(false) }
+                    val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
+                    view.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
+                    val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=2; maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
+                    val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
+                    val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }
+                    view.addView(title); view.addView(badge); view.addView(progress,LayoutParams(-1,dp(3)).apply { topMargin=dp(4) })
+                    val card=Card(key,view,image,title,badge,progress,entry)
+                    view.contentDescription=entry?.let { "${shelf.title}，${it.series.title}，${it.label}" } ?: "查看全部${shelf.title}"
+                    view.setOnClickListener { lastFocus=key; remember(key); card.entry?.let { open(it.series,it.resume) } ?: action?.invoke() }
+                    if(entry!=null) {
+                        view.setOnLongClickListener { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) }; true }
+                        view.setOnKeyListener { _,code,event -> if(code==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) } }; true } else false }
                     }
+                    view.setOnFocusChangeListener { _,focused ->
+                        view.background=shape(focused)
+                        if(focused) {
+                            lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
+                            if(!restoring) {
+                                loadNearbySelection()
+                                if(lastRow!=shelf.key) scroll.post { if(revision==ticket && view.hasFocus()) reveal(block) }
+                            }
+                            lastRow=shelf.key
+                        }
+                    }
+                    line.addView(view,LayoutParams(width,-1).apply { rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
                 }
-                line.addView(view,LayoutParams(width,-1).apply { rightMargin=dp(14) }); rowCards+=card; cards[key]=card
+                lines+=Line(horizontal,lineCards)
             }
-            shelf.entries.forEach { addCard(it) }
-            shelf.more?.let { action -> addCard(null,action) }
-            contents.addView(block,LayoutParams(-1,-2).apply { bottomMargin=dp(16) }); rows+=Row(shelf.key,block,horizontal,rowCards)
+            contents.addView(block,LayoutParams(-1,-2).apply { bottomMargin=dp(16) }); rows+=Row(shelf.key,block,lines,rowCards)
         }
         if(cards.isEmpty()) contents.addView(label("还没有本机记录，热门剧加载后可选择观看。",15f).apply { setPadding(0,dp(16),0,dp(16)) })
         if(!refreshPlaced) contents.addView(refresh,LayoutParams(-1,-2).apply { topMargin=dp(10) })
@@ -158,13 +171,28 @@ class HomeScreen(
             contents.addView(next,LayoutParams(-1,-2).apply { topMargin=dp(8) }); footer+=next; moreButton=next
         }
         val hotIndex=if(refreshPlaced) rows.indexOfFirst { it.key=="hot" } else -1
-        rows.forEachIndexed { i,row -> row.cards.forEachIndexed { j,card ->
-            card.view.nextFocusLeftId=row.cards[(j-1).coerceAtLeast(0)].view.id; card.view.nextFocusRightId=row.cards[(j+1).coerceAtMost(row.cards.lastIndex)].view.id
-            card.view.nextFocusUpId=when { refreshPlaced && i==hotIndex -> refresh.id; i==0 -> top.id; else -> rows[i-1].cards[j.coerceAtMost(rows[i-1].cards.lastIndex)].view.id }
-            card.view.nextFocusDownId=if(i==rows.lastIndex) (footer.firstOrNull()?.id ?: if(refreshPlaced) card.view.id else refresh.id) else rows[i+1].cards[j.coerceAtMost(rows[i+1].cards.lastIndex)].view.id
-        } }
-        if(refreshPlaced) { refresh.nextFocusUpId=top.id; refresh.nextFocusDownId=rows.getOrNull(hotIndex)?.cards?.firstOrNull()?.view?.id ?: refresh.id }
-        footer.forEachIndexed { i,v -> v.nextFocusUpId=if(i==0) rows.lastOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id else footer[i-1].id; v.nextFocusDownId=footer.getOrNull(i+1)?.id ?: v.id }
+        rows.forEachIndexed { i,row ->
+            row.lines.forEachIndexed { lineIndex,line ->
+                line.cards.forEachIndexed { column,card ->
+                    card.view.nextFocusLeftId=line.cards.getOrNull(column-1)?.view?.id ?: card.view.id
+                    card.view.nextFocusRightId=line.cards.getOrNull(column+1)?.view?.id ?: card.view.id
+                    val upCard=row.lines.getOrNull(lineIndex-1)?.cards?.getOrNull(column) ?: rows.getOrNull(i-1)?.lines?.lastOrNull()?.cards?.getOrNull(column)
+                    card.view.nextFocusUpId=when {
+                        upCard!=null -> upCard.view.id
+                        i==0 -> if(refreshPlaced && lineIndex==0 && column==0) refresh.id else top.id
+                        else -> rows[i-1].lines.lastOrNull()?.cards?.lastOrNull()?.view?.id ?: top.id
+                    }
+                    val downCard=row.lines.getOrNull(lineIndex+1)?.cards?.getOrNull(column) ?: rows.getOrNull(i+1)?.lines?.firstOrNull()?.cards?.getOrNull(column)
+                    card.view.nextFocusDownId=when {
+                        downCard!=null -> downCard.view.id
+                        i==rows.lastIndex -> footer.firstOrNull()?.id ?: card.view.id
+                        else -> rows[i+1].lines.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: footer.firstOrNull()?.id ?: card.view.id
+                    }
+                }
+            }
+        }
+        if(refreshPlaced) { refresh.nextFocusUpId=top.id; refresh.nextFocusDownId=rows.getOrNull(hotIndex)?.lines?.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: refresh.id }
+        footer.forEachIndexed { i,v -> v.nextFocusUpId=if(i==0) rows.lastOrNull()?.lines?.lastOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id else footer[i-1].id; v.nextFocusDownId=footer.getOrNull(i+1)?.id ?: v.id }
         top.nextFocusDownId=firstId()
         val preferred=focus.ifBlank { previous?.focus.orEmpty() }
         val target=target(preferred,previous)
@@ -194,19 +222,23 @@ class HomeScreen(
         cards[key]?.let { return it.view }
         if(position!=null) {
             val row=rows.firstOrNull { it.key==position.shelf } ?: rows.getOrNull(position.row.coerceAtMost(rows.lastIndex))
+            val perRow=6
+            val lineIndex=(position.column/perRow).coerceIn(0,(row?.lines?.size ?: 1)-1)
+            val colInLine=(position.column%perRow).coerceIn(0,perRow-1)
+            row?.lines?.getOrNull(lineIndex)?.cards?.getOrNull(colInLine)?.let { return it.view }
             row?.cards?.getOrNull(position.column.coerceAtMost(row.cards.lastIndex))?.let { return it.view }
         }
         return cards.values.firstOrNull()?.view ?: refresh
     }
     private fun restoreOffsets(position: Position) {
-        rows.forEach { row -> row.horizontal.scrollTo(position.horizontal[row.key] ?: 0,0) }
+        rows.forEach { row -> row.lines.forEach { it.horizontal.scrollTo(position.horizontal[row.key] ?: 0,0) } }
         scroll.scrollTo(0,position.vertical)
         // A removed row can leave the nearest surviving card outside the old viewport.
         rows.firstOrNull { row -> row.cards.any { it.view.hasFocus() } }?.let(::revealSelection)
     }
     private fun revealSelection(row: Row) {
         row.cards.firstOrNull { it.view.hasFocus() }?.view?.let { card ->
-            val horizontal=row.horizontal
+            val horizontal=row.lines.firstOrNull { line -> line.cards.any { it.view===card } }?.horizontal ?: row.lines.firstOrNull()?.horizontal ?: return
             val left=horizontal.scrollX
             val right=left+horizontal.width-horizontal.paddingRight
             val target=when { card.left<left -> card.left; card.right>right -> card.right-horizontal.width+horizontal.paddingRight; else -> left }

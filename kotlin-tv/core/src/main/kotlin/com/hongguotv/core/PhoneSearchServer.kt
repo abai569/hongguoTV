@@ -72,7 +72,8 @@ class PhoneSearchServer(
         if(stopped.get()) return respond(socket,410,"手机推送已关闭")
         val path=request[1].substringBefore('?')
         val queryString=request[1].substringAfter('?', "")
-        if(headers["host"]!=host || path !in listOf("/","/submit","/clear")) return respond(socket,404,"页面不存在")
+        val hostOnly=host.substringBefore(':')
+        if(headers["host"]?.substringBefore(':')!=hostOnly || path !in listOf("/","/submit","/clear")) return respond(socket,404,"页面不存在")
         if(request[0]=="GET" && path=="/") return respond(socket,200,page(null))
         if(request[0]=="GET" && path=="/clear") { onClear(); return respond(socket,200,page("已清空电视输入框。")) }
         if(request[0]=="GET" && path=="/submit") {
