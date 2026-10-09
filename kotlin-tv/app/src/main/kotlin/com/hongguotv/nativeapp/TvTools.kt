@@ -98,10 +98,18 @@ class TvTools(private val activity: Activity) {
         buttons.first().requestFocus()
     }
     private fun qr(url: String)=ImageView(activity).apply {
-        val size=480
-        val bits=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,size,size)
-        val pixels=IntArray(size*size) { index -> if(bits[index%size,index/size]) Color.BLACK else Color.WHITE }
-        setImageBitmap(Bitmap.createBitmap(pixels,size,size,Bitmap.Config.ARGB_8888))
+        val size=600
+        val full=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,size,size)
+        var left=size; var top=size; var right=-1; var bottom=-1
+        for(y in 0 until size) for(x in 0 until size) if(full[x,y]) { if(x<left) left=x; if(x>right) right=x; if(y<top) top=y; if(y>bottom) bottom=y }
+        val contentWidth=right-left+1
+        val module=((size-contentWidth)/8.0).coerceAtLeast(1.0)
+        val margin=(module*2).toInt()
+        val x0=(left-margin).coerceAtLeast(0); val y0=(top-margin).coerceAtLeast(0)
+        val x1=(right+margin).coerceAtMost(size-1); val y1=(bottom+margin).coerceAtMost(size-1)
+        val w=x1-x0+1; val h=y1-y0+1
+        val pixels=IntArray(w*h) { index -> val x=x0+index%w; val y=y0+index/w; if(full[x,y]) Color.BLACK else Color.WHITE }
+        setImageBitmap(Bitmap.createBitmap(pixels,w,h,Bitmap.Config.ARGB_8888))
         setBackgroundColor(Color.WHITE)
         contentDescription="二维码"
     }

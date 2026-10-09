@@ -17,10 +17,11 @@ import java.util.concurrent.TimeUnit
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
                      val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
-    val downloadUrl get() = "$RELEASES/download/$tag/$fileName"
+    val downloadUrl get() = "${DOWNLOAD_PROXY}$RELEASES/download/$tag/$fileName"
     companion object {
-        const val REPOSITORY = "N3urda/hongguoTV-updates"
+        const val REPOSITORY = "abai569/hongguoTV"
         const val RELEASES = "https://github.com/$REPOSITORY/releases"
+        const val DOWNLOAD_PROXY = "https://ghfast.top/"
         const val MAX_APK_BYTES = 80L * 1024 * 1024
         fun parse(json: String): AppUpdate {
             val o = JSONObject(json)
@@ -78,14 +79,14 @@ class AppUpdateRepository : java.io.Closeable {
         .callTimeout(5, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
             // Follow GitHub's CDN redirects, never cleartext or arbitrary manifest-provided hosts.
-            if (url.scheme != "https" || url.host !in setOf("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"))
+            if (url.scheme != "https" || url.host !in setOf("ghfast.top", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"))
                 throw IOException("更新下载地址不受支持")
             chain.proceed(chain.request())
         }.build()
     private fun request(url: String) = Request.Builder().url(url).header("User-Agent", "HongguoTV-Updater")
         .header("Cache-Control", "no-cache").build()
     fun latest(): AppUpdate {
-        val call = http.newCall(request("${AppUpdate.RELEASES}/latest/download/update.json"))
+        val call = http.newCall(request("${AppUpdate.DOWNLOAD_PROXY}${AppUpdate.RELEASES}/latest/download/update.json"))
         call.timeout().timeout(25, TimeUnit.SECONDS)
         return call.execute().use { response ->
             if (!response.isSuccessful) throw IOException(if (response.code == 404) "尚无可用的自动更新版本" else "无法检查更新，请稍后重试")

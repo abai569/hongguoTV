@@ -46,7 +46,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private var status = "当前版本 ${BuildConfig.VERSION_NAME}"
     private var retryAfter = 0L
     private var promptedCode = 0L
-    private val auto get() = preferences.getBoolean("automatic", true)
+    private val auto get() = preferences.getBoolean("automatic", false)
     private val poll = object : Runnable {
         override fun run() {
             if (!active) return
