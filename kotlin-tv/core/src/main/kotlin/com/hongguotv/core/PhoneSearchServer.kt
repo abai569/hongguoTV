@@ -21,7 +21,7 @@ class PhoneSearchServer(
 ): Closeable {
     private val stopped=java.util.concurrent.atomic.AtomicBoolean(false)
     private val localAddress=InetAddress.getByName(address).also { require(it.isLoopbackAddress || it.isSiteLocalAddress) }.hostAddress
-    private val listener=ServerSocket(port,4).apply { soTimeout=500 }
+    private val listener=ServerSocket().apply { reuseAddress=true; bind(java.net.InetSocketAddress(port),4); soTimeout=500 }
     private val host="$localAddress:${listener.localPort}"
     val url="http://$host/"
     private val thread=Thread({ serve() },"hongguotv-phone-input").apply { isDaemon=true }
@@ -70,9 +70,16 @@ class PhoneSearchServer(
             if(headers.put(key,next.substring(at+1).trim())!=null) return respond(socket,400,"重复请求头")
         }
         if(stopped.get()) return respond(socket,410,"手机推送已关闭")
-        if(headers["host"]!=host || request[1] !in listOf("/","/submit","/clear")) return respond(socket,404,"页面不存在")
-        if(request[0]=="GET" && request[1]=="/") return respond(socket,200,page(null))
-        if(request[0]=="GET" && request[1]=="/clear") { onClear(); return respond(socket,200,page("已清空电视输入框。")) }
+        val path=request[1].substringBefore('?')
+        val queryString=request[1].substringAfter('?', "")
+        if(headers["host"]!=host || path !in listOf("/","/submit","/clear")) return respond(socket,404,"页面不存在")
+        if(request[0]=="GET" && path=="/") return respond(socket,200,page(null))
+        if(request[0]=="GET" && path=="/clear") { onClear(); return respond(socket,200,page("已清空电视输入框。")) }
+        if(request[0]=="GET" && path=="/submit") {
+            val query=parseQuery(queryString) ?: return respond(socket,400,"请输入 1—80 个字符的剧名")
+            respond(socket,200,page("已发送到电视，可以继续发送下一个剧名。"))
+            onQuery(query); return
+        }
         if(request[0]!="POST") return respond(socket,405,"不支持的操作")
         val origin=headers["origin"]
         if(origin!=null && origin!="null" && origin.trimEnd('/')!="http://$host") return respond(socket,403,"来源不匹配")
@@ -80,13 +87,17 @@ class PhoneSearchServer(
         val length=headers["content-length"]?.toIntOrNull()?.takeIf { it in 0..4096 } ?: return respond(socket,413,"输入内容过长")
         val body=ByteArray(length); var offset=0
         while(offset<body.size) { val n=input.read(body,offset,body.size-offset); if(n<0) return; offset+=n }
-        if(request[1]=="/clear") { onClear(); return respond(socket,200,page("已清空电视输入框。")) }
-        val fields=String(body,Charsets.UTF_8).split('&').map { it.split('=',limit=2) }
-        if(fields.size!=1 || fields[0].size!=2 || fields[0][0]!="query") return respond(socket,400,"请填写剧名")
-        val query=runCatching { URLDecoder.decode(fields[0][1],"UTF-8").trim() }.getOrNull()
-        if(query.isNullOrBlank() || query.length>80 || query.any { it.isISOControl() }) return respond(socket,400,"请输入 1—80 个字符的剧名")
+        if(path=="/clear") { onClear(); return respond(socket,200,page("已清空电视输入框。")) }
+        val query=parseQuery(String(body,Charsets.UTF_8)) ?: return respond(socket,400,"请输入 1—80 个字符的剧名")
         respond(socket,200,page("已发送到电视，可以继续发送下一个剧名。"))
         onQuery(query)
+    }
+    private fun parseQuery(text: String): String? {
+        val fields=text.split('&').map { it.split('=',limit=2) }
+        if(fields.count { it.size==2 && it[0]=="query" }!=1) return null
+        val value=runCatching { URLDecoder.decode(fields.first { it.size==2 && it[0]=="query" }[1],"UTF-8").trim() }.getOrNull() ?: return null
+        if(value.isBlank() || value.length>80 || value.any { it.isISOControl() }) return null
+        return value
     }
     private fun page(status: String?): String {
         val notice=if(status==null) "" else "<p class=\"status\">$status</p>"

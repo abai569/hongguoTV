@@ -433,18 +433,43 @@ class MainActivity: Activity() {
             if(hotKeywords.isEmpty()) hotKeywords=(library.cachedHome(ContentType.SHORT)?.items.orEmpty()+library.cachedHome(ContentType.COMIC)?.items.orEmpty()).map { it.title }.filter { it.isNotBlank() }.distinct().take(8)
             val area=row()
             val left=column()
-            val keyword=text("关键字：${searchDraft.ifBlank { "…" }}",24f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(6),0,0,dp(10)) }
-            searchKeyword=keyword; left.addView(keyword)
+            val keywordRow=row().apply { setPadding(dp(2),0,0,dp(10)) }
+            keywordRow.addView(text("关键词：",20f,muted))
+            val input=EditText(this).apply {
+                id=View.generateViewId(); hint="请输入剧名或关键词"; setText(searchDraft); setSelection(text.length)
+                textSize=20f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1
+                filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                setPadding(dp(12),dp(8),dp(12),dp(8)); background=rounded(TvStyle.surface,TvStyle.outline)
+            }
+            keywordRow.addView(input,lp(0,dp(46)).apply { weight=1f })
+            left.addView(keywordRow); searchKeyword=input
+            var syncingText=false
             lateinit var keyboard: SearchKeyboard
-            keyboard=SearchKeyboard(this,onChange={ value -> searchDraft=value; keyword.text="关键字：${value.ifBlank { "…" }}"; scheduleSuggest(value) },onSearch={ if(searchDraft.isNotBlank()) runSearch(searchDraft) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) })
+            keyboard=SearchKeyboard(this,onChange={ value ->
+                searchDraft=value
+                if(input.text.toString()!=value) { syncingText=true; input.setText(value); input.setSelection(value.length); syncingText=false }
+                scheduleSuggest(value)
+            },onSearch={ input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) })
             searchKeyboard=keyboard; searchButton=null
             left.addView(keyboard)
+            input.addTextChangedListener(object: android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) {}
+                override fun onTextChanged(s: CharSequence?,start: Int,before: Int,count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if(syncingText) return
+                    val value=(s?.toString() ?: "").take(80)
+                    searchDraft=value
+                    if(keyboard.value()!=value) keyboard.setText(value)
+                    scheduleSuggest(value)
+                }
+            })
+            input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
             area.addView(left,lp(0,-1).apply { weight=1.2f; rightMargin=dp(24) })
             val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
             val right=column(); rightScroll.addView(right)
             val history=library.searches()
             right.addView(text("历史",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
-            val historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; keyboard.setText(it.query); runSearch(it.query,it.type) } })
+            val historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard.setText(it.query); runSearch(it.query,it.type) } })
             recommendTitle=text("热门推荐",20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
             right.addView(recommendTitle)
             val host=column(); recommendHost=host; right.addView(host)
@@ -454,8 +479,8 @@ class MainActivity: Activity() {
             keyboard.setText(searchDraft)
             val rightTarget=historyFlow?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
             keyboard.linkRight(rightTarget)
-            nav.forEach { it.nextFocusDownId=keyboard.firstKeyId }
-            if(!nav.any { it.hasFocus() }) keyboard.focusFirst()
+            input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard.firstKeyId
+            nav.forEach { it.nextFocusDownId=input.id }
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text("漫剧热播榜",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })

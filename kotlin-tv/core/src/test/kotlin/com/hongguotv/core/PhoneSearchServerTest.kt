@@ -19,6 +19,29 @@ class PhoneSearchServerTest {
         }
     }
 
+    @Test fun `browser-like submit with full headers works`() {
+        var got=""
+        PhoneSearchServer("127.0.0.1",onQuery={ got=it },port=0).use { server ->
+            val uri=URI(server.url)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+            val extra="Origin: http://${uri.authority}\r\nAccept: text/html,application/xhtml+xml\r\nAccept-Encoding: gzip, deflate, br\r\nReferer: http://${uri.authority}/\r\nUpgrade-Insecure-Requests: 1\r\nSec-Fetch-Site: same-origin\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n"
+            val reply=request(server,"POST",uri.path+"submit","query="+URLEncoder.encode("万妖图录传","UTF-8"),extra)
+            assertTrue(reply,reply.startsWith("HTTP/1.1 200"))
+            assertEquals("万妖图录传",got)
+        }
+    }
+
+    @Test fun `get submit fallback and clear link work`() {
+        var got=""; var cleared=false
+        PhoneSearchServer("127.0.0.1",onQuery={ got=it },onClear={ cleared=true },port=0).use { server ->
+            val uri=URI(server.url)
+            assertTrue(request(server,"GET",uri.path+"submit?query="+URLEncoder.encode("万妖","UTF-8")).startsWith("HTTP/1.1 200"))
+            assertEquals("万妖",got)
+            assertTrue(request(server,"GET",uri.path+"clear").startsWith("HTTP/1.1 200"))
+            assertTrue(cleared)
+        }
+    }
+
     @Test fun `phone input uses fixed port and accepts repeated root submissions`() {
         val received=mutableListOf<String>()
         PhoneSearchServer("127.0.0.1",onQuery={ received+=it },port=8787).use { server ->
