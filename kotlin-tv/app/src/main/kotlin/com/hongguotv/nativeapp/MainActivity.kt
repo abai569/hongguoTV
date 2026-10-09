@@ -376,7 +376,7 @@ class MainActivity: Activity() {
         val top=row().apply { setPadding(0,0,0,dp(8)) }
         val brand=row()
         brand.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(28),dp(28)).apply { rightMargin=dp(9) })
-        brand.addView(text("红果TV",22f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) })
+        brand.addView(text("紅菓TV",22f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) })
         top.addView(brand,lp(dp(120),dp(44)))
         listOf("首页","搜索","排行榜","收藏","最近观看","设置").forEachIndexed { index,label ->
             val item=addButton(top,label,index==tab) { switchTab(index) }
@@ -822,7 +822,7 @@ class MainActivity: Activity() {
         left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right[i].id }
         right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text("红果TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text("紅菓TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun runSearch(value: String,type: ContentType=library.contentType) {
