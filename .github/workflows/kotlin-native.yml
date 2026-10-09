@@ -23,7 +23,6 @@ jobs:
           packages: platform-tools
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Restore signing keystore from secret
-        if: ${{ secrets.HONGGUOTV_KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_BASE64 }}
         run: |
