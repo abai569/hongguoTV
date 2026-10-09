@@ -215,7 +215,6 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                id=View.generateViewId()
                 text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
                 isFocusable=true; isFocusableInTouchMode=true
@@ -373,7 +372,6 @@ class MainActivity: Activity() {
             catalog=cached?.items ?: emptyList(); hasMore=cached?.hasMore ?: false; ranking=null; homeFromCache=cached!=null
         }
         invalidatePage(); screen="catalog"; releaseCatalogViews(); val container=base()
-        nav.clear(); typeButtons.clear(); searchActions.clear(); resumeCards.clear(); catalogCards.clear(); cardImages.clear(); favoriteBadges.clear()
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val top=row().apply { setPadding(0,0,0,dp(8)) }
         val brand=row()
@@ -389,7 +387,7 @@ class MainActivity: Activity() {
             }
             paint(false); item.setOnFocusChangeListener { _,focused ->
                 paint(focused)
-                if(focused && tab!=index) main.post { if(tab!=index) switchTab(index) }
+                if(focused && tab!=index) switchTab(index)
             }; nav+=item
         }
         container.addView(top)
@@ -409,7 +407,7 @@ class MainActivity: Activity() {
                             setTextColor(if(focused) bg else if(library.contentType==type) accent else muted)
                             background=rounded(if(focused) white else if(library.contentType==type) Color.rgb(48,32,29) else Color.TRANSPARENT)
                             setTypeface(null,if(focused || library.contentType==type) Typeface.BOLD else Typeface.NORMAL)
-                            if(focused && library.contentType!=type) main.post { if(library.contentType!=type) switchContentType(type) }
+                            if(focused && library.contentType!=type) switchContentType(type)
                         }
                     }
             }
@@ -479,7 +477,6 @@ class MainActivity: Activity() {
             keyboard.setText(searchDraft)
             val rightTarget=historyFlow?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
             keyboard.linkRight(rightTarget)
-            keyboard.linkDown(rightTarget)
             input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard.firstKeyId
             nav.forEach { it.nextFocusDownId=input.id }
         } else if(tab==2) {
@@ -549,8 +546,6 @@ class MainActivity: Activity() {
                     if(resumeCards.isNotEmpty()) resumeCards.first().requestFocus()
                 }
             })
-        } else if(tab==1 && query.isBlank()) {
-            // 搜索键盘页：底部 body 保持空，不残留上一次搜索结果
         } else catalogGrid(body,focusNav,focusType)
     }
     private fun catalogGrid(body: LinearLayout,focusNav: Boolean,focusType: Boolean=false,loading: Boolean=false) {
@@ -1271,7 +1266,7 @@ class MainActivity: Activity() {
         when(screen) {
             "player" -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> showCatalog()
-            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
+            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; catalog=emptyList(); hasMore=false; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
         }
     }
     @Deprecated("TV remote back is handled through the activity")
