@@ -812,7 +812,7 @@ class MainActivity: Activity() {
         }
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
-        val debugBtn=setting(device,"调试 · 播放信息") {
+        val debugBtn=setting(playback,"调试 · 播放信息") {
             AlertDialog.Builder(this).setTitle("播放信息").setMessage(lastStreamDebug.ifEmpty { "先播放一集再来看" }).setPositiveButton("关闭",null).show()
         }
         val license=setting(device,"开源许可") {
