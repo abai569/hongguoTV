@@ -963,11 +963,36 @@ class MainActivity: Activity() {
             val view=PlayerView(this).apply {
                 useController=false; resizeMode=frameResizeMode(); isFocusable=false
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                if(!isTvDevice) setOnTouchListener { _,event ->
-                    if(event.action==android.view.MotionEvent.ACTION_UP) {
-                        if(panel) hidePanel() else showPanel()
+                if(!isTvDevice) {
+                    var startX=0f; var startPos=0L; var dragging=false
+                    view.setOnTouchListener { _,event ->
+                        when(event.action) {
+                            android.view.MotionEvent.ACTION_DOWN -> { startX=event.x; startPos=player?.currentPosition ?: 0L; dragging=false }
+                            android.view.MotionEvent.ACTION_MOVE -> {
+                                val dx=event.x-startX
+                                if(kotlin.math.abs(dx)>30 && !dragging) { dragging=true; showPanel() }
+                                if(dragging) {
+                                    val dur=player?.duration ?: 0L
+                                    if(dur>0) {
+                                        val delta=(dx/ view.width * dur).toLong()
+                                        val newPos=(startPos+delta).coerceIn(0,dur)
+                                        progressBar.progress=(newPos*1000/dur).toInt()
+                                        playbackText.text="拖动  ${formatTime(newPos)} / ${formatTime(dur)}"
+                                    }
+                                }
+                            }
+                            android.view.MotionEvent.ACTION_UP -> {
+                                if(dragging) {
+                                    val dur=player?.duration ?: 0L
+                                    if(dur>0) {
+                                        val delta=((event.x-startX)/ view.width * dur).toLong()
+                                        player?.seekTo((startPos+delta).coerceIn(0,dur))
+                                    }
+                                } else { if(panel) hidePanel() else showPanel() }
+                            }
+                        }
+                        true
                     }
-                    true
                 }
             }
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
