@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -963,7 +964,7 @@ class MainActivity: Activity() {
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) setOnTouchListener { _,event ->
                     if(event.action==android.view.MotionEvent.ACTION_UP) {
-                        p?.playWhenReady=!(p?.playWhenReady ?: true)
+                        player?.playWhenReady=!(player?.playWhenReady ?: true)
                     }
                     true
                 }
