@@ -208,7 +208,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                 for(i in 0 until allDanmaku.length()) danmakuRaw.put(allDanmaku.getJSONObject(i))
             }
         }.onFailure { debug.append("FAIL: ${it.message}") }
-        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU ===\n"+debug.toString(); danmakuRaw=this@ContentRepository.danmakuRaw }
+        val result=StreamInfo(url,key,quality)
+        result.debugRaw=info.toString()+"\n\n=== DANMAKU ===\n"+debug.toString()
+        result.danmakuRaw=danmakuRaw
+        return result
     }
     companion object {
         fun extractRouter(html: String): JSONObject {
