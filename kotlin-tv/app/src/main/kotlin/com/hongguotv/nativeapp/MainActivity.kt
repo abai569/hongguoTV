@@ -84,6 +84,8 @@ class MainActivity: Activity() {
     private var sleepStopped=false
     private var playerView: PlayerView?=null
     private var danmakuView: DanmakuView?=null
+    private var danmakuNextOffset=0L
+    private var danmakuFetchRunnable: Runnable?=null
     private lateinit var favoriteMonitor: FavoriteMonitor
     private val favoriteBadges=mutableMapOf<String,TextView>()
     private var favoriteStatus: TextView?=null
@@ -1023,6 +1025,24 @@ class MainActivity: Activity() {
             // Set up danmaku
             if(library.danmakuEnabled && remote.info.danmakuRaw.length()>0) {
                 danmakuView?.setData(remote.info.danmakuRaw); danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
+                danmakuNextOffset=60000L
+                danmakuFetchRunnable?.let { main.removeCallbacks(it) }
+                danmakuFetchRunnable=object: Runnable {
+                    override fun run() {
+                        val p=player ?: return
+                        val pos=p.currentPosition
+                        val dur=remote.info.durationMs
+                        if(danmakuNextOffset<dur && pos>danmakuNextOffset-30000) {
+                            val off=danmakuNextOffset
+                            danmakuNextOffset+=15000
+                            work({ repository.fetchDanmakuWindow(remote.info.episodeId,off,dur) }) { arr ->
+                                if(arr.length()>0) danmakuView?.appendData(arr)
+                            }
+                        }
+                        if(danmakuNextOffset<dur) main.postDelayed(this,5000)
+                    }
+                }
+                main.postDelayed(danmakuFetchRunnable!!,5000)
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
@@ -1441,6 +1461,23 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L)))))
+            pending.add(Dm(timeMs,processed,0f,0f,0f))
+        }
+        pending.sortBy { it.time }
+        invalidate()
+    }
+    fun appendData(raw: org.json.JSONArray) {
+        val emojis=mapOf("[爱慕]" to "😍","[赞]" to "👍","[送花]" to "🌹","[笑哭]" to "😂","[大笑]" to "😄","[调皮]" to "😜","[色]" to "😍","[嘘]" to "🤫","[呆]" to "😳","[鼻血]" to "🤤","[来看]" to "👀","[666]" to "💯","[doge]" to "🐶","[舔屏]" to "😋","[惊喜]" to "🤩","[委屈]" to "😢","[流泪]" to "😭","[怒]" to "😠","[惊]" to "😮","[啊]" to "😱","[尴尬]" to "😅","[思考]" to "🤔","[得意]" to "😎","[坏笑]" to "😏","[爱心]" to "❤️","[心]" to "❤️","[ok]" to "👌","[鼓掌]" to "👏","[加油]" to "💪","[牛]" to "🐂","[跪了]" to "🙇","[拜]" to "🙏","[睡]" to "😴","[困]" to "😪","[累]" to "😩","[冷]" to "🥶","[热]" to "🥵","[饿]" to "😋","[胖]" to "🐷","[美]" to "🌸","[帅]" to "😎","[富]" to "💰","[火]" to "🔥","[哈哈]" to "😂","[哈哈哈]" to "😂","[泪]" to "😭","[喷]" to "🤯","[抠鼻]" to "👃","[白眼]" to "🙄","[哈欠]" to "🥱","[舔]" to "😋","[吻]" to "😘","[抱]" to "🤗","[握手]" to "🤝","[强]" to "👍","[弱]" to "👎","[顶]" to "👆","[踩]" to "👇","[钱]" to "💰","[花]" to "🌸","[月]" to "🌙","[日]" to "☀️","[星]" to "⭐","[雨]" to "🌧️","[雪]" to "❄️","[雷]" to "⚡","[水]" to "💧","[山]" to "⛰️","[海]" to "🌊","[路]" to "🛤️","[桥]" to "🌉","[玩]" to "🎮","[乐]" to "🎉","[喜]" to "😊","[爱]" to "❤️","[情]" to "💘")
+        for(i in 0 until raw.length()) {
+            val item=raw.optJSONObject(i) ?: continue
+            val commentObj=item.optJSONObject("comment") ?: continue
+            val commonObj=commentObj.optJSONObject("common") ?: continue
+            val text=commonObj.optJSONObject("content")?.optString("text") ?: continue
+            var processed=text
+            for((k,v) in emojis) processed=processed.replace(k,v)
+            var timeMs=0L
+            val expand=commentObj.optJSONObject("expand")
+            if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",0L))
             pending.add(Dm(timeMs,processed,0f,0f,0f))
         }
         pending.sortBy { it.time }
