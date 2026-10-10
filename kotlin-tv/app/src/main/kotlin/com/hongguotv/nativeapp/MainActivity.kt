@@ -1243,7 +1243,7 @@ class MainActivity: Activity() {
                 }
             })
         }.apply { tag="playback-settings" }
-        play.requestFocus()
+        transportPlay?.requestFocus()
     }
     private fun showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
         if(speedDialog!=null) return
