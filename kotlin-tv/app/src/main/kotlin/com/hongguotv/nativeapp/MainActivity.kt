@@ -417,7 +417,7 @@ class MainActivity: Activity() {
         }
         top.addView(Space(this),lp(0,1).apply { weight=1f })
         val rightCol=column()
-        val topRow=row()
+        val topRow=row().apply { gravity=Gravity.END }
         topRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
         clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END; val lp=lp(-2,-2); lp.gravity=Gravity.CENTER_VERTICAL }
         topRow.addView(clockText)
