@@ -126,6 +126,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
         renderActions()
         next.getButton(AlertDialog.BUTTON_POSITIVE).post { if (dialog === next) next.getButton(AlertDialog.BUTTON_POSITIVE).requestFocus() }
+        check(false)
     }
     private fun <T> work(action: () -> T, done: (T) -> Unit) {
         busy = true; renderActions(); val ticket = ++generation
