@@ -130,8 +130,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun searchSuggest(keyword: String): List<String> {
         val values=VendorConstants.device.toMutableMap()
-        values.putAll(linkedMapOf("query" to keyword,"widget" to "2","image_scale" to "1","aid" to "1967"))
-        val signed=signer.sign("https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/suggest/v/",values)
+        values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0"))
+        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/search/suggest/v/",values)
         val data=JSONObject(text(signed.url,signed))
         if(data.optInt("code",-1)!=0) return emptyList()
         val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
