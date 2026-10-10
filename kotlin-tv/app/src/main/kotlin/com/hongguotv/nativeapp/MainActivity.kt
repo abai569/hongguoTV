@@ -86,6 +86,7 @@ class MainActivity: Activity() {
     private var danmakuView: DanmakuView?=null
     private var danmakuNextOffset=0L
     private var danmakuFetchRunnable: Runnable?=null
+    private var lastTapTime=0L
     private lateinit var favoriteMonitor: FavoriteMonitor
     private val favoriteBadges=mutableMapOf<String,TextView>()
     private var favoriteStatus: TextView?=null
@@ -991,8 +992,14 @@ class MainActivity: Activity() {
                                         player?.seekTo((startPos+delta).coerceIn(0,dur))
                                     }
                                 } else {
-                                    if(panel || hud.visibility==View.VISIBLE) { panel=false; controls.visibility=View.GONE; hud.visibility=View.GONE }
-                                    else showPanel()
+                                    val now=System.currentTimeMillis()
+                                    if(now-lastTapTime<300) {
+                                        togglePlayback(); lastTapTime=0
+                                    } else {
+                                        lastTapTime=now
+                                        if(panel || hud.visibility==View.VISIBLE) { panel=false; controls.visibility=View.GONE; hud.visibility=View.GONE }
+                                        else showPanel()
+                                    }
                                 }
                             }
                         }
