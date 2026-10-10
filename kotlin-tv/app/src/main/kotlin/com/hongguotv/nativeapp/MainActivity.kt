@@ -1003,7 +1003,7 @@ class MainActivity: Activity() {
                                         pauseIcon?.setImageResource(if(playing) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause)
                                         pauseIcon?.visibility=View.VISIBLE
                                         main.removeCallbacks(pauseIconRunnable)
-                                        if(playing) { pauseIconRunnable={ pauseIcon?.visibility=View.GONE }; main.postDelayed(pauseIconRunnable,1200) }
+                                        if(playing) { pauseIconRunnable=Runnable { pauseIcon?.visibility=View.GONE }; main.postDelayed(pauseIconRunnable,1200) }
                                     } else {
                                         lastTapTime=now
                                         main.postDelayed({
