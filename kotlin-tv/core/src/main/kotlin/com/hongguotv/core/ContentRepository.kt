@@ -158,7 +158,22 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
         val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        return StreamInfo(url,key,quality).apply { debugRaw=info.toString() }
+        // DEBUG: try possible danmaku endpoints
+        val debug=StringBuilder()
+        val vid=info.str("video_id")
+        listOf(
+            "/reading/bookapi/danmaku/list/v/?video_id=$vid",
+            "/reading/bookapi/barrage/list/v/?video_id=$vid",
+            "/reading/novel/player/danmaku/v1/?video_id=$vid",
+            "/reading/bookapi/danmaku/v1/list/?item_id=$vid"
+        ).forEach { path ->
+            runCatching {
+                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com$path",VendorConstants.device,"".toByteArray())
+                val body=text(signed.url,signed)
+                debug.append("== $path ==\n").append(body.take(300)).append("\n\n")
+            }.onFailure { debug.append("== $path == FAIL: ${it.message}\n\n") }
+        }
+        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU DEBUG ===\n"+debug.toString() }
     }
     companion object {
         fun extractRouter(html: String): JSONObject {
