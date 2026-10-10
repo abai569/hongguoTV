@@ -165,47 +165,51 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val danmakuRaw=JSONArray()
         runCatching {
             val allDanmaku=JSONArray()
-            var cursor=""
-            var shouldStop=false
-            while(!shouldStop) {
-                try {
-                    val bodyObj=JSONObject().apply {
-                        put("comment_source",601)
-                        put("server_channel",1000)
-                        put("group_id",id)
-                        put("group_type",30)
-                        put("comment_type",20)
-                        put("sort",1)
-                        put("business_param",JSONObject().apply {
-                            put("book_id",id)
-                            put("start_offset_time",0)
-                            put("playlet_item_duration",durationMs)
-                            put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
-                        })
-                        put("count",90)
-                        put("cursor",cursor)
-                        put("aid",8662)
-                        put("compliance_status",0)
+            var offset=0L
+            while(offset<durationMs) {
+                var cursor=""
+                var pageStop=false
+                while(!pageStop) {
+                    try {
+                        val bodyObj=JSONObject().apply {
+                            put("comment_source",601)
+                            put("server_channel",1000)
+                            put("group_id",id)
+                            put("group_type",30)
+                            put("comment_type",20)
+                            put("sort",1)
+                            put("business_param",JSONObject().apply {
+                                put("book_id",id)
+                                put("start_offset_time",offset)
+                                put("playlet_item_duration",durationMs)
+                                put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
+                            })
+                            put("count",90)
+                            put("cursor",cursor)
+                            put("aid",8662)
+                            put("compliance_status",0)
+                        }
+                        val bodyBytes=bodyObj.toString().toByteArray()
+                        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(id,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
+                        val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
+                        val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
+                        extraHeaders.forEach { (k,v) -> request.header(k,v) }
+                        request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
+                        val respJson=JSONObject(resp)
+                        val dataList=respJson.optJSONObject("data")?.optJSONArray("data_list")
+                        if(dataList!=null && dataList.length()>0) {
+                            for(i in 0 until dataList.length()) allDanmaku.put(dataList.getJSONObject(i))
+                        }
+                        val hasMore=respJson.optJSONObject("data")?.optBoolean("has_more",false) ?: false
+                        cursor=respJson.optJSONObject("data")?.optString("cursor","") ?: ""
+                        if(!hasMore || cursor.isEmpty()) pageStop=true
+                    } catch(e: Exception) {
+                        debug.append("\nwindow ${offset/1000}s FAIL: ${e.message}")
+                        pageStop=true
                     }
-                    val bodyBytes=bodyObj.toString().toByteArray()
-                    val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(id,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
-                    val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
-                    val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
-                    extraHeaders.forEach { (k,v) -> request.header(k,v) }
-                    request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                    val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
-                    val respJson=JSONObject(resp)
-                    val dataList=respJson.optJSONObject("data")?.optJSONArray("data_list")
-                    if(dataList!=null && dataList.length()>0) {
-                        for(i in 0 until dataList.length()) allDanmaku.put(dataList.getJSONObject(i))
-                    }
-                    val hasMore=respJson.optJSONObject("data")?.optBoolean("has_more",false) ?: false
-                    cursor=respJson.optJSONObject("data")?.optString("cursor","") ?: ""
-                    if(!hasMore || cursor.isEmpty()) shouldStop=true
-                } catch(e: Exception) {
-                    debug.append("\ncursor ${cursor.take(20)} FAIL: ${e.message}")
-                    shouldStop=true
                 }
+                offset+=15000
             }
             debug.append("\nTotal danmaku: ${allDanmaku.length()}")
             if(allDanmaku.length()>0) {
