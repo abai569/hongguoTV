@@ -162,15 +162,15 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val debug=StringBuilder()
         val vid=info.str("video_id")
         listOf(
-            "/reading/bookapi/danmaku/list/v/?video_id=$vid",
-            "/reading/bookapi/barrage/list/v/?video_id=$vid",
-            "/reading/novel/player/danmaku/v1/?video_id=$vid",
-            "/reading/bookapi/danmaku/v1/list/?item_id=$vid"
-        ).forEach { path ->
+            "/reading/bookapi/danmaku/list/v/" to mapOf("video_id" to vid),
+            "/reading/bookapi/barrage/list/v/" to mapOf("video_id" to vid),
+            "/reading/novel/player/danmaku/v1/" to mapOf("video_id" to vid),
+            "/reading/bookapi/danmaku/v1/list/" to mapOf("item_id" to vid)
+        ).forEach { (path,params) ->
             runCatching {
-                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com$path",VendorConstants.device,"".toByteArray())
+                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com$path",VendorConstants.device+params,"".toByteArray())
                 val body=text(signed.url,signed)
-                debug.append("== $path ==\n").append(body.take(300)).append("\n\n")
+                debug.append("== $path ==\n").append(body.take(500)).append("\n\n")
             }.onFailure { debug.append("== $path == FAIL: ${it.message}\n\n") }
         }
         return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU DEBUG ===\n"+debug.toString() }
