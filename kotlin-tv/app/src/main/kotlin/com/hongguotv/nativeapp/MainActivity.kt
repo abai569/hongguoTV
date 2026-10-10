@@ -93,9 +93,12 @@ class MainActivity: Activity() {
     private var memberText: TextView?=null
     private val clockRunnable=object: Runnable {
         override fun run() {
-            val now=java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(java.util.Date())
-            clockText?.text="紅菓TV  $now"
-            memberText?.text="会员剩余31274976677天7时9分"
+            val now=java.util.Date()
+            clockText?.text="紅菓TV  "+java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(now)
+            val expire=java.util.Date(now.time+31274976677L*86400000L+7*3600000L+9*60000L)
+            val diff=(expire.time-now.time)/1000
+            val days=diff/86400; val hours=(diff%86400)/3600; val mins=(diff%3600)/60; val secs=diff%60
+            memberText?.text="会员剩余${days}天${hours}时${mins}分${secs}秒"
             main.postDelayed(this,1000)
         }
     }
@@ -417,7 +420,7 @@ class MainActivity: Activity() {
         top.addView(Space(this),lp(0,1).apply { weight=1f })
         val rightCol=column()
         clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END }
-        memberText=text("",11f,muted).apply { gravity=Gravity.END }
+        memberText=text("会员剩余31274976677天7时9分",11f,muted).apply { gravity=Gravity.END }
         rightCol.addView(clockText); rightCol.addView(memberText)
         top.addView(rightCol)
         container.addView(top)
@@ -427,15 +430,8 @@ class MainActivity: Activity() {
             settings(body); if(focusNav) nav[tab].requestFocus(); return
         }
         if(tab==0) {
-            val types=row().apply { setPadding(0,dp(8),0,dp(6)) }
             library.contentType=ContentType.COMIC
-            typeButtons[ContentType.COMIC]=addButton(types,ContentType.COMIC.label,true) {}.apply { isSelected=true; nextFocusUpId=nav[tab].id; isClickable=false; isFocusable=false }
-            if(inlineHomeFilters()) {
-                top.addView(Space(this),lp(0,1).apply { weight=1f })
-                types.setPadding(0,0,0,0); top.addView(types)
-            } else {
-                container.addView(types)
-            }
+            typeButtons[ContentType.COMIC]=nav[0]
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
         if(tab==1 && query.isNotBlank()) {
