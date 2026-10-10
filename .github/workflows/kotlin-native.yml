@@ -40,7 +40,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=72
+          export HONGGUOTV_VERSION_CODE=73
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"

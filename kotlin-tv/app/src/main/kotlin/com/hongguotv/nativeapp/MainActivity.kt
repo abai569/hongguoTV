@@ -94,9 +94,11 @@ class MainActivity: Activity() {
     private val clockRunnable=object: Runnable {
         override fun run() {
             val now=java.util.Date()
-            clockText?.text="紅菓TV  "+java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(now)
-            val expire=java.util.Date(now.time+31274976677L*86400000L+7*3600000L+9*60000L)
-            val diff=(expire.time-now.time)/1000
+            clockText?.text="紅菓TV  "+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
+            val sp=getSharedPreferences("hongguotv",MODE_PRIVATE)
+            var expire=sp.getLong("member_expire",0)
+            if(expire==0L){ expire=now.time+31274976677L*86400000L+7*3600000L+9*60000L; sp.edit().putLong("member_expire",expire).apply() }
+            val diff=(expire-now.time)/1000
             val days=diff/86400; val hours=(diff%86400)/3600; val mins=(diff%3600)/60; val secs=diff%60
             memberText?.text="会员剩余${days}天${hours}时${mins}分${secs}秒"
             main.postDelayed(this,1000)
@@ -402,8 +404,6 @@ class MainActivity: Activity() {
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val top=row().apply { setPadding(0,0,0,dp(8)) }
         val brand=row()
-        brand.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(28),dp(28)).apply { rightMargin=dp(9) })
-        brand.addView(text("紅菓TV",22f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) })
         top.addView(brand,lp(dp(120),dp(44)))
         listOf("首页","搜索","排行榜","收藏","最近观看","设置").forEachIndexed { index,label ->
             val item=addButton(top,label,index==tab) { switchTab(index) }
@@ -418,9 +418,10 @@ class MainActivity: Activity() {
             }; nav+=item
         }
         top.addView(Space(this),lp(0,1).apply { weight=1f })
-        val rightCol=column()
-        clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END }
-        memberText=text("会员剩余31274976677天7时9分",11f,muted).apply { gravity=Gravity.END }
+        val rightCol=row()
+        rightCol.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
+        clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END; val lp=lp(-2,-2); lp.gravity=Gravity.CENTER_VERTICAL }
+        memberText=text("",12f,Color.rgb(255,180,0)).apply { gravity=Gravity.END; setTypeface(null,Typeface.BOLD) }
         rightCol.addView(clockText); rightCol.addView(memberText)
         top.addView(rightCol)
         container.addView(top)
