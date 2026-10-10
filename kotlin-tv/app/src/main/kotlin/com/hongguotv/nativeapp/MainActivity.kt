@@ -83,6 +83,7 @@ class MainActivity: Activity() {
     private val sleepTimer=SleepTimer { android.os.SystemClock.elapsedRealtime() }
     private var sleepStopped=false
     private var playerView: PlayerView?=null
+    private var danmakuView: DanmakuView?=null
     private lateinit var favoriteMonitor: FavoriteMonitor
     private val favoriteBadges=mutableMapOf<String,TextView>()
     private var favoriteStatus: TextView?=null
@@ -970,6 +971,8 @@ class MainActivity: Activity() {
                 }
             }
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
+            danmakuView=DanmakuView(this).apply { visibility=View.GONE; currentPosProvider={ player?.currentPosition ?: 0L } }
+            root.addView(danmakuView,FrameLayout.LayoutParams(-1,-1))
             hud=column().apply { setPadding(dp(widthDp()*.05f),dp(20),dp(widthDp()*.05f),(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
             playbackTitle=text("",23f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD) }; hud.addView(playbackTitle)
             playbackText=text("",15f,muted).apply { setPadding(0,dp(10),0,dp(9)) }; hud.addView(playbackText)
@@ -985,6 +988,10 @@ class MainActivity: Activity() {
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
         work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
+            // Set up danmaku
+            if(library.danmakuEnabled && remote.info.danmaku.isNotEmpty()) {
+                danmakuView?.setData(remote.info.danmaku); danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
+            } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
                 val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
@@ -1195,14 +1202,15 @@ class MainActivity: Activity() {
         episodes=addButton(options,"选集") { showEpisodePanel(episodes) }
         lateinit var more: TextView
         more=addButton(options,"播放设置") {
-            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","定时 ${sleepTimer.label()}","从头播放"),more,{ choice ->
+            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
                         0 -> showSpeedPicker(more)
                         1 -> showQualityPicker(more,true)
                         2 -> showFramePicker(more,true)
-                        3 -> showSleepPicker(more)
-                        4 -> { seekTo(0); hidePanel() }
+                        3 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
+                        4 -> showSleepPicker(more)
+                        5 -> { seekTo(0); hidePanel() }
                     }
                 }
             })
@@ -1277,7 +1285,7 @@ class MainActivity: Activity() {
         speedDialog?.dismiss(); speedDialog=null
         main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); pendingSeek=null
         playerListener?.let { player?.removeListener(it) }; playerListener=null
-        video?.close(); video=null; playerView?.player=null; playerView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
+        video?.close(); video=null; playerView?.player=null; playerView=null; danmakuView?.stop(); danmakuView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
         closeTransport(playbackHttp); playbackHttp=null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
@@ -1381,4 +1389,43 @@ class MainActivity: Activity() {
         Thread({ repository.http.dispatcher.cancelAll(); repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown() },"hongguotv-network-cleanup").start()
         super.onDestroy()
     }
+}
+private class DanmakuView(context: android.content.Context): android.view.View(context) {
+    data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
+    private val pending=mutableListOf<Pair<Long,String>>()
+    private val active=mutableListOf<Dm>()
+    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=36f; isAntiAlias=true; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
+    private var lastPos=0L; private var started=false
+    fun setData(items: List<Pair<Long,String>>) { pending.clear(); pending.addAll(items.sortedBy { it.first }); active.clear(); invalidate() }
+    fun start() { started=true; lastPos=0; handler.post(tick) }
+    fun stop() { started=false; handler.removeCallbacks(tick) }
+    private val handler=android.os.Handler(android.os.Looper.getMainLooper())
+    private val tick=object: Runnable { override fun run() {
+        if(!started) return
+        postInvalidate()
+        handler.postDelayed(this,33)
+    }}
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        super.onDraw(canvas)
+        val w=width.toFloat(); val h=height.toFloat()
+        // Spawn danmaku whose time has come
+        if(pending.isNotEmpty()) {
+            val currentPos=currentPosProvider?.invoke() ?: 0L
+            while(pending.isNotEmpty() && pending[0].first<=currentPos) {
+                val (t,text)=pending.removeAt(0)
+                active.add(Dm(t,text,w,randomY(h),8f+Math.random()*4f))
+            }
+            lastPos=currentPos
+        }
+        // Update and draw
+        val it=active.iterator()
+        while(it.hasNext()) {
+            val dm=it.next()
+            dm.x-=dm.speed
+            if(dm.x+paint.measureText(dm.text)<0) { it.remove(); continue }
+            canvas.drawText(dm.text,dm.x,dm.y,paint)
+        }
+    }
+    private fun randomY(h: Float): Float { val lanes=3; val lane=(0 until lanes).random(); return h*0.12f+lane*(h*0.1f) }
+    var currentPosProvider: (()->Long)?=null
 }
