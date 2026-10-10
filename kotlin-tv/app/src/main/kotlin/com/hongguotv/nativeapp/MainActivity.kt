@@ -89,6 +89,16 @@ class MainActivity: Activity() {
     private var lastTapTime=0L
     private var pauseIcon: android.widget.ImageView?=null
     private var pauseIconRunnable=Runnable {}
+    private var clockText: TextView?=null
+    private var memberText: TextView?=null
+    private val clockRunnable=object: Runnable {
+        override fun run() {
+            val now=java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(java.util.Date())
+            clockText?.text="紅菓TV  $now"
+            memberText?.text="会员剩余31274976677天7时9分"
+            main.postDelayed(this,1000)
+        }
+    }
     private val singleTapRunnable=Runnable {}
     private lateinit var favoriteMonitor: FavoriteMonitor
     private val favoriteBadges=mutableMapOf<String,TextView>()
@@ -404,6 +414,12 @@ class MainActivity: Activity() {
                 if(focused && tab!=index) switchTab(index)
             }; nav+=item
         }
+        top.addView(Space(this),lp(0,1).apply { weight=1f })
+        val rightCol=column()
+        clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END }
+        memberText=text("",11f,muted).apply { gravity=Gravity.END }
+        rightCol.addView(clockText); rightCol.addView(memberText)
+        top.addView(rightCol)
         container.addView(top)
         container.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(6) })
         if(tab==5) {
@@ -412,26 +428,14 @@ class MainActivity: Activity() {
         }
         if(tab==0) {
             val types=row().apply { setPadding(0,dp(8),0,dp(6)) }
-            if(!inlineHomeFilters()) types.addView(text("片库",12f,muted),lp(dp(42),-2))
-            ContentType.entries.forEach { type ->
-                typeButtons[type]=addButton(types,type.label,library.contentType==type) { switchContentType(type) }
-                    .apply {
-                        isSelected=library.contentType==type; nextFocusUpId=nav[tab].id
-                        setOnFocusChangeListener { _,focused ->
-                            setTextColor(if(focused) bg else if(library.contentType==type) accent else muted)
-                            background=rounded(if(focused) white else if(library.contentType==type) Color.rgb(48,32,29) else Color.TRANSPARENT)
-                            setTypeface(null,if(focused || library.contentType==type) Typeface.BOLD else Typeface.NORMAL)
-                            if(focused && library.contentType!=type) switchContentType(type)
-                        }
-                    }
-            }
+            library.contentType=ContentType.COMIC
+            typeButtons[ContentType.COMIC]=addButton(types,ContentType.COMIC.label,true) {}.apply { isSelected=true; nextFocusUpId=nav[tab].id; isClickable=false; isFocusable=false }
             if(inlineHomeFilters()) {
                 top.addView(Space(this),lp(0,1).apply { weight=1f })
-                typeButtons.values.forEach { view -> (view as TextView).apply { textSize=12f; minHeight=dp(34); setPadding(dp(12),dp(7),dp(12),dp(7)) } }
                 types.setPadding(0,0,0,0); top.addView(types)
             } else {
-                if(tab==0) types.addView(text("长按确认 · 管理片单",12f,muted).apply { setPadding(dp(14),0,0,0) })
                 container.addView(types)
+            }
             }
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
@@ -1421,6 +1425,7 @@ class MainActivity: Activity() {
     }
     override fun onResume() {
         super.onResume(); foreground=true; main.removeCallbacks(tick); main.post(tick)
+        clockRunnable.run()
         updater.resume()
         if(library.isLoaded) {
             if(initialCatalogPending) showCatalog(load=true)
