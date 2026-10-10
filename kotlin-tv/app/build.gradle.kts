@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId = "com.hongguotv.nativeapp"
         minSdk = 26
-        targetSdk = 29
+        targetSdk = 33
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 61
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "1.3.0"
     }
