@@ -1426,7 +1426,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
-    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=36f; isAntiAlias=true; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
+    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=48f; isAntiAlias=true; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
     private var lastPos=0L; private var started=false
     fun setData(raw: org.json.JSONArray) {
         pending.clear(); active.clear()
@@ -1478,6 +1478,6 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             canvas.drawText(dm.text,dm.x,dm.y,paint)
         }
     }
-    private fun randomY(h: Float): Float { val lanes=3; val lane=(0 until lanes).random(); return h*0.12f+lane*(h*0.1f) }
+    private fun randomY(h: Float): Float { val lanes=5; val lane=(0 until lanes).random(); return h*0.1f+lane*(h*0.08f) }
     var currentPosProvider: (()->Long)?=null
 }

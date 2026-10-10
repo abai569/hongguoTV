@@ -165,8 +165,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val danmakuRaw=JSONArray()
         runCatching {
             val allDanmaku=JSONArray()
-            var offset=0L
-            while(offset<durationMs) {
+            var cursor=""
+            while(true) {
                 runCatching {
                     val bodyObj=JSONObject().apply {
                         put("comment_source",601)
@@ -177,12 +177,12 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                         put("sort",1)
                         put("business_param",JSONObject().apply {
                             put("book_id",id)
-                            put("start_offset_time",offset)
+                            put("start_offset_time",0)
                             put("playlet_item_duration",durationMs)
                             put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
                         })
                         put("count",90)
-                        put("cursor","")
+                        put("cursor",cursor)
                         put("aid",8662)
                         put("compliance_status",0)
                     }
@@ -195,11 +195,13 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
                     val respJson=JSONObject(resp)
                     val dataList=respJson.optJSONObject("data")?.optJSONArray("data_list")
-                    if(dataList!=null) {
+                    if(dataList!=null && dataList.length()>0) {
                         for(i in 0 until dataList.length()) allDanmaku.put(dataList.getJSONObject(i))
                     }
-                    offset+=30000
-                }.onFailure { debug.append("\nwindow ${offset/1000}s FAIL: ${it.message}"); offset+=30000 }
+                    val hasMore=respJson.optJSONObject("data")?.optBoolean("has_more",false) ?: false
+                    cursor=respJson.optJSONObject("data")?.optString("cursor","") ?: ""
+                    if(!hasMore || cursor.isEmpty()) break
+                }.onFailure { debug.append("\ncursor ${cursor.take(20)} FAIL: ${it.message}"); break }
             }
             debug.append("\nTotal danmaku: ${allDanmaku.length()}")
             if(allDanmaku.length()>0) {
