@@ -158,33 +158,24 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
         val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        // DEBUG: test real danmaku endpoint
+        // Fetch danmaku: group_id=numeric episode id, group_type=30, 30s windows
         val debug=StringBuilder()
-        val vid=info.str("video_id")
         val durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
         runCatching {
-            // try multiple parameter combos
-            val combos=listOf(
-                Triple(id, 30, id),           // numeric id as group_id, book_id
-                Triple(vid, 30, id),          // video_id as group_id
-                Triple(id, 1, id),            // group_type=1
-                Triple(id, 2, id),            // group_type=2
-                Triple(id, 10, id),           // group_type=10
-                Triple(id, 20, id),           // group_type=20
-                Triple(id, 40, id)            // group_type=40
-            )
-            combos.forEachIndexed { idx,(gid,gtype,bid) ->
+            val allDanmaku=JSONArray()
+            var offset=0L
+            while(offset<durationMs) {
                 runCatching {
                     val bodyObj=JSONObject().apply {
                         put("comment_source",601)
                         put("server_channel",1000)
-                        put("group_id",gid)
-                        put("group_type",gtype)
+                        put("group_id",id)
+                        put("group_type",30)
                         put("comment_type",20)
                         put("sort",1)
                         put("business_param",JSONObject().apply {
-                            put("book_id",bid)
-                            put("start_offset_time",0)
+                            put("book_id",id)
+                            put("start_offset_time",offset)
                             put("playlet_item_duration",durationMs)
                             put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
                         })
@@ -194,18 +185,28 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                         put("compliance_status",0)
                     }
                     val bodyBytes=bodyObj.toString().toByteArray()
-                    val pathVid=if(gid.startsWith("v")) vid else id
-                    val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(pathVid,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
+                    val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(id,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
                     val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
                     val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
                     extraHeaders.forEach { (k,v) -> request.header(k,v) }
                     request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
                     val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
-                    debug.append("\n[$idx] gid=$gid gtype=$gtype -> ").append(resp.take(200))
-                }.onFailure { debug.append("\n[$idx] FAIL: ${it.message}") }
+                    val respJson=JSONObject(resp)
+                    val dataList=respJson.optJSONObject("data")?.optJSONArray("data_list")
+                    if(dataList!=null) {
+                        for(i in 0 until dataList.length()) allDanmaku.put(dataList.getJSONObject(i))
+                    }
+                    offset+=30000
+                }.onFailure { debug.append("\nwindow ${offset/1000}s FAIL: ${it.message}"); offset+=30000 }
+            }
+            debug.append("\nTotal danmaku: ${allDanmaku.length()}")
+            if(allDanmaku.length()>0) {
+                val first=allDanmaku.getJSONObject(0)
+                debug.append("\nFirst item keys: ").append(first.keys().asSequence().toList())
+                debug.append("\nFirst item: ").append(first.toString().take(500))
             }
         }.onFailure { debug.append("FAIL: ${it.message}") }
-        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU RESULT ===\n"+debug.toString() }
+        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU ===\n"+debug.toString() }
     }
     companion object {
         fun extractRouter(html: String): JSONObject {
