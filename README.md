@@ -2,7 +2,7 @@
 
 当前分支提供 **Kotlin 原生独立 APK**：安装后联网即可使用，无需 Node / Docker。最低 Android 8.0，电视遥控器操作。
 
-**[下载原生版 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
+**[下载原生版 APK](https://github.com/abai569/hongguoTV/releases/latest)** · [原生版说明与构建](kotlin-tv/README.md)
 
 1.0.0 搜索与推送修复：搜索结果返回后焦点自动回到清空按钮；热门推荐显示全部；词条按左键逐键左移；推送服务持续可用直到关闭软件；首页热门 3 行 18 个。见 [原生版说明与构建](kotlin-tv/README.md)。
 
