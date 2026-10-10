@@ -87,6 +87,9 @@ class MainActivity: Activity() {
     private var danmakuNextOffset=0L
     private var danmakuFetchRunnable: Runnable?=null
     private var lastTapTime=0L
+    private var pauseIcon: android.widget.ImageView?=null
+    private var pauseIconRunnable=Runnable {}
+    private val singleTapRunnable=Runnable {}
     private lateinit var favoriteMonitor: FavoriteMonitor
     private val favoriteBadges=mutableMapOf<String,TextView>()
     private var favoriteStatus: TextView?=null
@@ -994,11 +997,19 @@ class MainActivity: Activity() {
                                 } else {
                                     val now=System.currentTimeMillis()
                                     if(now-lastTapTime<300) {
-                                        togglePlayback(); lastTapTime=0
+                                        main.removeCallbacks(singleTapRunnable); lastTapTime=0
+                                        togglePlayback()
+                                        val playing=player?.playWhenReady ?: true
+                                        pauseIcon?.setImageResource(if(playing) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause)
+                                        pauseIcon?.visibility=View.VISIBLE
+                                        main.removeCallbacks(pauseIconRunnable)
+                                        if(playing) { pauseIconRunnable={ pauseIcon?.visibility=View.GONE }; main.postDelayed(pauseIconRunnable,1200) }
                                     } else {
                                         lastTapTime=now
-                                        if(panel || hud.visibility==View.VISIBLE) { panel=false; controls.visibility=View.GONE; hud.visibility=View.GONE }
-                                        else showPanel()
+                                        main.postDelayed({
+                                            if(panel || hud.visibility==View.VISIBLE) { panel=false; controls.visibility=View.GONE; hud.visibility=View.GONE }
+                                            else showPanel()
+                                        },300)
                                     }
                                 }
                             }
@@ -1008,6 +1019,11 @@ class MainActivity: Activity() {
                 }
             }
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
+            pauseIcon=android.widget.ImageView(this).apply {
+                setImageResource(android.R.drawable.ic_media_pause); setColorFilter(android.graphics.Color.WHITE)
+                setBackgroundColor(android.graphics.Color.argb(120,0,0,0)); visibility=View.GONE
+                setPadding(dp(24),dp(24),dp(24),dp(24))
+            }; root.addView(pauseIcon,FrameLayout.LayoutParams(dp(96),dp(96)).apply { gravity=android.view.Gravity.CENTER })
             danmakuView=DanmakuView(this).apply { visibility=View.GONE; currentPosProvider={ player?.currentPosition ?: 0L } }
             root.addView(danmakuView,FrameLayout.LayoutParams(-1,-1))
             hud=column().apply { setPadding(dp(widthDp()*.05f),dp(20),dp(widthDp()*.05f),(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
