@@ -128,6 +128,15 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(items.isEmpty() && !short.hasMore && !comic.hasMore) throw IOException("Search unavailable")
         return CatalogPage(items,short.hasMore || comic.hasMore)
     }
+    fun searchSuggest(keyword: String): List<String> {
+        val values=VendorConstants.device.toMutableMap()
+        values.putAll(linkedMapOf("query" to keyword,"widget" to "2","image_scale" to "1","aid" to "1967"))
+        val signed=signer.sign("https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/suggest/v/",values)
+        val data=JSONObject(text(signed.url,signed))
+        if(data.optInt("code",-1)!=0) return emptyList()
+        val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
+        return arr.objects().mapNotNull { it.optString("word").ifBlank { null } }.take(10)
+    }
     fun detail(id: String): Detail {
         require(id.matches(Regex("[0-9]{1,30}")))
         val o=router("$site/detail?series_id=$id").optJSONObject("detail_page")?.optJSONObject("seriesDetail") ?: throw IOException("剧集详情暂不可用")

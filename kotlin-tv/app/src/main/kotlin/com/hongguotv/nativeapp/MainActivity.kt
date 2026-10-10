@@ -175,7 +175,7 @@ class MainActivity: Activity() {
             val ticket=++suggestGeneration
             if(value.isEmpty()) { renderSuggestions(emptyList()); return }
             io.submit {
-                val titles=runCatching { repository.searchAll(value,1).items.map { it.title } }.getOrDefault(emptyList()).take(8)
+                val titles=runCatching { repository.searchSuggest(value) }.getOrDefault(emptyList()).ifEmpty { runCatching { repository.searchAll(value,1).items.map { it.title } }.getOrDefault(emptyList()) }.take(8)
                 main.post { if(ticket==suggestGeneration && screen=="catalog" && tab==1 && suggestDraft.trim()==value) renderSuggestions(titles) }
             }
         }
@@ -267,10 +267,12 @@ class MainActivity: Activity() {
         if(items.isEmpty()) { host.addView(text(empty,13f,muted)); return }
         addChips(host,items.map { it to { searchDraft=it; searchKeyboard?.setText(it); runSearch(it) } })
     }
+    private var historyTitle: View?=null
+    private var historyFlow: View?=null
     private fun renderSuggestions(titles: List<String>) {
         val host=recommendHost ?: return
-        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; fillRecommend(host,hotKeywords,"暂无推荐") }
-        else { recommendTitle?.text="建议"; fillRecommend(host,titles,"暂无建议") }
+        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; historyTitle?.visibility=View.VISIBLE; historyFlow?.visibility=View.VISIBLE; fillRecommend(host,hotKeywords,"暂无推荐") }
+        else { recommendTitle?.text="建议"; historyTitle?.visibility=View.GONE; historyFlow?.visibility=View.GONE; fillRecommend(host,titles,"暂无建议") }
     }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -482,8 +484,9 @@ class MainActivity: Activity() {
             val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
             val right=column(); rightScroll.addView(right)
             val history=library.searches()
-            right.addView(text("历史",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) })
-            val historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard.setText(it.query); runSearch(it.query,it.type) } })
+            historyTitle=text("历史",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
+            right.addView(historyTitle)
+            historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard.setText(it.query); runSearch(it.query,it.type) } })
             recommendTitle=text("热门推荐",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
             right.addView(recommendTitle)
             val host=column(); recommendHost=host; right.addView(host)
