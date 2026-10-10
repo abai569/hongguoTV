@@ -173,11 +173,13 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     private fun validateApk(update: AppUpdate) {
         if (!UpdateFiles.verify(apk, update)) throw IOException("安装包校验未通过，请重新下载")
         val pm = activity.packageManager
-        val candidate = pm.getPackageArchiveInfo(apk.path, 0) ?: throw IOException("安装包无法识别")
+        val candidate = pm.getPackageArchiveInfo(apk.path, android.content.pm.PackageManager.GET_ACTIVITIES) ?: throw IOException("安装包无法识别")
         val version = candidate.versionCode.toLong()
-        if (candidate.packageName != activity.packageName || version <= BuildConfig.VERSION_CODE ||
-            candidate.applicationInfo?.minSdkVersion != update.minSdk)
+        if (candidate.packageName != activity.packageName || version <= BuildConfig.VERSION_CODE)
             throw IOException("新版包名或版本不匹配，已阻止安装")
+        val minSdk = candidate.applicationInfo?.minSdkVersion
+        if (minSdk != null && minSdk != update.minSdk)
+            throw IOException("新版最低系统要求不匹配，已阻止安装")
     }
     private fun install() {
         val update = available ?: return
