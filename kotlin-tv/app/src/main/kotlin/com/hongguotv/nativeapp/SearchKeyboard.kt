@@ -56,13 +56,9 @@ class SearchKeyboard(
         addKey(functions,"清空",1.2f) { text=""; onChange(text) }
         addKey(functions,"删除",1.2f) { if(text.isNotEmpty()) { text=text.dropLast(1); onChange(text) } }
         addKey(functions,"推送",1.2f) { onPush() }
-        listOf("ABCDEFG","HIJKLMN","OPQRSTU","VWXYZ").forEach { letters ->
+        listOf("ABCDEF","GHIJKL","MNOPQR","STUVWX","YZ0123","456789").forEach { letters ->
             val row=keyRow()
             letters.forEach { letter -> addKey(row,letter.toString()) { char(letter) } }
-        }
-        run {
-            val row=keyRow()
-            "0123456789".forEach { digit -> addKey(row,digit.toString()) { char(digit) } }
         }
         rows.forEachIndexed { rowIndex,row ->
             row.forEachIndexed { column,view ->
