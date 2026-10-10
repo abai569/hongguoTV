@@ -139,8 +139,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun searchSuggestRaw(keyword: String): String {
         val values=VendorConstants.device.toMutableMap()
-        values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0"))
-        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/search/suggest/v/",values)
+        values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0","widget" to "2"))
+        val signed=signer.sign("https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/suggest/v/",values)
         return text(signed.url,signed).take(500)
     }
     fun detail(id: String): Detail {
