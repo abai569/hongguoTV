@@ -23,7 +23,7 @@ data class ComicRanking(val positions: Map<String,RankPosition>, val totalPages:
 data class CatalogPage(val items: List<Series>, val hasMore: Boolean, val ranking: ComicRanking? = null)
 data class StreamInfo(val url: String, val key: ByteArray?, val quality: String) {
     var debugRaw: String = ""
-    var danmaku: List<Pair<Long, String>> = emptyList()
+    var danmakuRaw: JSONArray = JSONArray()
 }
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
@@ -162,7 +162,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         // Fetch danmaku: group_id=numeric episode id, group_type=30, 30s windows
         val debug=StringBuilder()
         val durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
-        var danmakuResult: List<Pair<Long,String>>=emptyList()
+        val danmakuRaw=JSONArray()
         runCatching {
             val allDanmaku=JSONArray()
             var offset=0L
@@ -205,28 +205,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             if(allDanmaku.length()>0) {
                 val first=allDanmaku.getJSONObject(0)
                 debug.append("\nFirst item: ").append(first.toString())
-                // Parse danmaku into (timeMs, text) pairs
-                val parsed=mutableListOf<Pair<Long,String>>()
-                for(i in 0 until allDanmaku.length()) {
-                    val item=allDanmaku.getJSONObject(i)
-                    val commentObj=item.optJSONObject("comment") ?: continue
-                    val text=commentObj.optJSONObject("content")?.optString("text") ?: continue
-                    // Try to find video time offset
-                    var timeMs=0L
-                    val expand=commentObj.optJSONObject("expand")
-                    if(expand!=null) {
-                        timeMs=expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L))))
-                    }
-                    if(timeMs==0L) {
-                        val extra=expand?.optJSONObject("extra")
-                        if(extra!=null) timeMs=extra.optLong("offset",extra.optLong("video_offset",0L))
-                    }
-                    parsed.add(timeMs to text)
-                }
-                danmakuResult=parsed
+                for(i in 0 until allDanmaku.length()) danmakuRaw.put(allDanmaku.getJSONObject(i))
             }
         }.onFailure { debug.append("FAIL: ${it.message}") }
-        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU ===\n"+debug.toString(); danmaku=danmakuResult }
+        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU ===\n"+debug.toString(); danmakuRaw=this@ContentRepository.danmakuRaw }
     }
     companion object {
         fun extractRouter(html: String): JSONObject {

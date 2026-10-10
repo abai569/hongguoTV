@@ -989,8 +989,8 @@ class MainActivity: Activity() {
         work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
             // Set up danmaku
-            if(library.danmakuEnabled && remote.info.danmaku.isNotEmpty()) {
-                danmakuView?.setData(remote.info.danmaku); danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
+            if(library.danmakuEnabled && remote.info.danmakuRaw.length()>0) {
+                danmakuView?.setData(remote.info.danmakuRaw); danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
@@ -1392,11 +1392,30 @@ class MainActivity: Activity() {
 }
 private class DanmakuView(context: android.content.Context): android.view.View(context) {
     data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
-    private val pending=mutableListOf<Pair<Long,String>>()
+    private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
     private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=36f; isAntiAlias=true; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
     private var lastPos=0L; private var started=false
-    fun setData(items: List<Pair<Long,String>>) { pending.clear(); pending.addAll(items.sortedBy { it.first }); active.clear(); invalidate() }
+    fun setData(raw: org.json.JSONArray) {
+        pending.clear(); active.clear()
+        for(i in 0 until raw.length()) {
+            val item=raw.optJSONObject(i) ?: continue
+            val commentObj=item.optJSONObject("comment") ?: continue
+            val text=commentObj.optJSONObject("content")?.optString("text") ?: continue
+            var timeMs=0L
+            val expand=commentObj.optJSONObject("expand")
+            if(expand!=null) {
+                timeMs=expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L))))
+            }
+            if(timeMs==0L) {
+                val extra=expand?.optJSONObject("extra")
+                if(extra!=null) timeMs=extra.optLong("offset",extra.optLong("video_offset",0L))
+            }
+            pending.add(Dm(timeMs,text,0f,0f,0f))
+        }
+        pending.sortBy { it.time }
+        invalidate()
+    }
     fun start() { started=true; lastPos=0; handler.post(tick) }
     fun stop() { started=false; handler.removeCallbacks(tick) }
     private val handler=android.os.Handler(android.os.Looper.getMainLooper())
@@ -1411,9 +1430,9 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
         // Spawn danmaku whose time has come
         if(pending.isNotEmpty()) {
             val currentPos=currentPosProvider?.invoke() ?: 0L
-            while(pending.isNotEmpty() && pending[0].first<=currentPos) {
-                val (t,text)=pending.removeAt(0)
-                active.add(Dm(t,text,w,randomY(h),8f+Math.random()*4f))
+            while(pending.isNotEmpty() && pending[0].time<=currentPos) {
+                val dm=pending.removeAt(0)
+                active.add(dm.copy(x=w, y=randomY(h), speed=8f+Math.random()*4f))
             }
             lastPos=currentPos
         }
