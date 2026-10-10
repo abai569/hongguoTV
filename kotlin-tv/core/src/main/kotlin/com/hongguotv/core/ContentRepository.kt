@@ -228,7 +228,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         result.durationMs=durationMs
         return result
     }
-    suspend fun fetchDanmakuWindow(episodeId: String, offset: Long, durationMs: Long): JSONArray {
+    fun fetchDanmakuWindow(episodeId: String, offset: Long, durationMs: Long): JSONArray {
         val result=JSONArray()
         try {
             var cursor=""
