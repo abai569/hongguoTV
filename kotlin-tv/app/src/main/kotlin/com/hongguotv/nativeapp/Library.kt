@@ -162,6 +162,9 @@ class Library(context: Context) {
     var frameMode: VideoFrameMode
         get() = state().settings.frame
         set(value) { if (value != frameMode) { state().settings = state().settings.copy(frame = value); put("frameMode", value.name) } }
+    var danmakuEnabled: Boolean
+        get() = state().settings.danmaku
+        set(value) { if (value != danmakuEnabled) { state().settings = state().settings.copy(danmaku = value); put("danmaku", value) } }
     fun snapshot() = state().snapshot()
     fun restore(incoming: BackupData, restoreSettings: Boolean) {
         val merged = LibraryBackup.merge(snapshot(), incoming, restoreSettings)

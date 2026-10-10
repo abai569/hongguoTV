@@ -158,22 +158,40 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
         val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        // DEBUG: try possible danmaku endpoints
+        // DEBUG: test real danmaku endpoint
         val debug=StringBuilder()
         val vid=info.str("video_id")
-        listOf(
-            "/reading/bookapi/danmaku/list/v/" to mapOf("video_id" to vid),
-            "/reading/bookapi/barrage/list/v/" to mapOf("video_id" to vid),
-            "/reading/novel/player/danmaku/v1/" to mapOf("video_id" to vid),
-            "/reading/bookapi/danmaku/v1/list/" to mapOf("item_id" to vid)
-        ).forEach { (path,params) ->
-            runCatching {
-                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com$path",VendorConstants.device+params,"".toByteArray())
-                val body=text(signed.url,signed)
-                debug.append("== $path ==\n").append(body.take(500)).append("\n\n")
-            }.onFailure { debug.append("== $path == FAIL: ${it.message}\n\n") }
-        }
-        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU DEBUG ===\n"+debug.toString() }
+        val durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
+        runCatching {
+            val bodyObj=JSONObject().apply {
+                put("comment_source",601)
+                put("server_channel",1000)
+                put("group_id",vid)
+                put("group_type",30)
+                put("comment_type",20)
+                put("sort",1)
+                put("business_param",JSONObject().apply {
+                    put("book_id",id)
+                    put("start_offset_time",0)
+                    put("playlet_item_duration",durationMs)
+                    put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
+                })
+                put("count",90)
+                put("cursor","")
+                put("aid",8662)
+                put("compliance_status",0)
+            }
+            val bodyBytes=bodyObj.toString().toByteArray()
+            val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(vid,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
+            // add danmaku-specific headers
+            val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
+            val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
+            extraHeaders.forEach { (k,v) -> request.header(k,v) }
+            request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
+            debug.append(resp.take(1000))
+        }.onFailure { debug.append("FAIL: ${it.message}") }
+        return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU RESULT ===\n"+debug.toString() }
     }
     companion object {
         fun extractRouter(html: String): JSONObject {

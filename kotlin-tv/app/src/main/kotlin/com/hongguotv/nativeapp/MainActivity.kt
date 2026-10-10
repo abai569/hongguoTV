@@ -200,8 +200,13 @@ class MainActivity: Activity() {
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+    private val isTvDevice by lazy {
+        packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+        !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
+    }
     private fun focusStyle(view: View,selected: Boolean=false) {
-        view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
+        view.id=View.generateViewId(); view.isFocusable=true
+        if(isTvDevice) view.isFocusableInTouchMode=true
         fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) Color.rgb(61,39,34) else surface,if(focused) accent else Color.TRANSPARENT) }
         paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused) }
     }
@@ -795,6 +800,11 @@ class MainActivity: Activity() {
             library.autoNext=!library.autoNext
             autoNextButton.text="自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}"
         }
+        lateinit var danmakuButton: TextView
+        danmakuButton=setting(playback,"弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}") {
+            library.danmakuEnabled=!library.danmakuEnabled
+            danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
+        }
         lateinit var backup: TextView
         backup=setting(device,"手机备份与恢复") {
             runCatching { LibraryBackup.encode(library.snapshot()) }.onSuccess { encoded ->
@@ -812,7 +822,7 @@ class MainActivity: Activity() {
         }
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
-        val debugBtn=setting(playback,"调试 · 播放信息") {
+        val debugBtn=setting(device,"调试 · 播放信息") {
             if(lastStreamDebug.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return@setting }
             val cm=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("stream_debug",lastStreamDebug))
@@ -821,7 +831,7 @@ class MainActivity: Activity() {
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,debugBtn); val right=listOf(backup,hidden,updates,license)
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(backup,hidden,updates,debugBtn,license)
         listOf(left,right).forEach { items -> items.forEachIndexed { index,view ->
             view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
             view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
@@ -951,6 +961,12 @@ class MainActivity: Activity() {
             val view=PlayerView(this).apply {
                 useController=false; resizeMode=frameResizeMode(); isFocusable=false
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                if(!isTvDevice) setOnTouchListener { _,event ->
+                    if(event.action==android.view.MotionEvent.ACTION_UP) {
+                        p?.playWhenReady=!(p?.playWhenReady ?: true)
+                    }
+                    true
+                }
             }
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
             hud=column().apply { setPadding(dp(widthDp()*.05f),dp(20),dp(widthDp()*.05f),(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
