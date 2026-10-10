@@ -1223,16 +1223,13 @@ class MainActivity: Activity() {
         if(playError) return
         panel=true; showHud(); controls.visibility=View.VISIBLE; controls.removeAllViews()
         val transport=row(); controls.addView(transport)
-        val play=addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
-        addButton(transport,"快退10秒") { player?.seekTo((player?.currentPosition ?: 0)-10000) }
-        addButton(transport,"快进10秒") { player?.seekTo((player?.currentPosition ?: 0)+10000) }
+        addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
         addButton(transport,"上一集") { if(episodeIndex>0) playEpisode(episodeIndex-1) }.apply { isEnabled=episodeIndex>0; isFocusable=episodeIndex>0; alpha=if(episodeIndex>0) 1f else .4f }
         addButton(transport,"下一集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
-        val options=row().apply { setPadding(0,dp(8),0,0) }; controls.addView(options)
         lateinit var episodes: TextView
-        episodes=addButton(options,"选集") { showEpisodePanel(episodes) }
+        episodes=addButton(transport,"选集") { showEpisodePanel(episodes) }
         lateinit var more: TextView
-        more=addButton(options,"播放设置") {
+        more=addButton(transport,"播放设置") {
             tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
@@ -1426,7 +1423,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
-    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=48f; isAntiAlias=true; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
+    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=48f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
     private var lastPos=0L; private var started=false
     fun setData(raw: org.json.JSONArray) {
         pending.clear(); active.clear()
