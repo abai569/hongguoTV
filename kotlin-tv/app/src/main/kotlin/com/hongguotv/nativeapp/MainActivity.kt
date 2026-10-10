@@ -94,7 +94,7 @@ class MainActivity: Activity() {
     private val clockRunnable=object: Runnable {
         override fun run() {
             val now=java.util.Date()
-            clockText?.text="紅菓TV  "+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
+            clockText?.text="短剧TV  "+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
             val sp=getSharedPreferences("hongguotv",MODE_PRIVATE)
             var expire=sp.getLong("member_expire",0)
             if(expire==0L){ expire=now.time+31274976677L*86400000L+7*3600000L+9*60000L; sp.edit().putLong("member_expire",expire).apply() }
@@ -848,7 +848,7 @@ class MainActivity: Activity() {
         left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
         right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text("紅菓TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text("短剧TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun runSearch(value: String,type: ContentType=library.contentType) {
