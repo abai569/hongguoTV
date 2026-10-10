@@ -228,7 +228,7 @@ class MainActivity: Activity() {
             val chip=TextView(context).apply {
                 text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
-                isFocusable=true; isFocusableInTouchMode=true
+                isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
                 setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
                 setOnClickListener { action() }
@@ -460,7 +460,7 @@ class MainActivity: Activity() {
                 scheduleSuggest(value)
             },onSearch={ input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) })
             searchKeyboard=keyboard; searchButton=null
-            left.addView(keyboard)
+            if(isTvDevice) left.addView(keyboard) else left.addView(keyboard)
             input.addTextChangedListener(object: android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) {}
                 override fun onTextChanged(s: CharSequence?,start: Int,before: Int,count: Int) {}
