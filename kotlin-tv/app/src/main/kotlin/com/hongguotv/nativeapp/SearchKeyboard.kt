@@ -33,7 +33,7 @@ class SearchKeyboard(
             id=View.generateViewId(); text=label; gravity=Gravity.CENTER
             setTextColor(TvStyle.text); textSize=17f; includeFontPadding=false
             background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
-            isFocusable=true; isFocusableInTouchMode=true
+            isFocusable=true; isFocusableInTouchMode=context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
             setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
             setOnClickListener { action() }
         }
