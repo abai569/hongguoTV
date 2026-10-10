@@ -154,6 +154,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             } else {
                 updateStatus("发现 ${update.versionName} · ${"%.1f".format(update.size/1048576.0)} MB\n${update.notes}")
                 if (manual || auto) download(manual)
+                else download(false)
             }
         }
     }

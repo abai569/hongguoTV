@@ -177,7 +177,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                             put("group_id",id)
                             put("group_type",30)
                             put("comment_type",20)
-                            put("sort",1)
+                            put("sort",0)
                             put("business_param",JSONObject().apply {
                                 put("book_id",id)
                                 put("start_offset_time",offset)

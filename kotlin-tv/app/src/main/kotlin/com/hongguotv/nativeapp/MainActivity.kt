@@ -988,7 +988,10 @@ class MainActivity: Activity() {
                                         val delta=((event.x-startX)/ width * dur).toLong()
                                         player?.seekTo((startPos+delta).coerceIn(0,dur))
                                     }
-                                } else { if(panel) hidePanel() else showPanel() }
+                                } else {
+                                    if(panel || hud.visibility==View.VISIBLE) { panel=false; controls.visibility=View.GONE; hud.visibility=View.GONE }
+                                    else showPanel()
+                                }
                             }
                         }
                         true
@@ -1423,7 +1426,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
-    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=48f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
+    private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=42f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
     private var lastPos=0L; private var started=false
     fun setData(raw: org.json.JSONArray) {
         pending.clear(); active.clear()
@@ -1432,16 +1435,13 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             val commentObj=item.optJSONObject("comment") ?: continue
             val commonObj=commentObj.optJSONObject("common") ?: continue
             val text=commonObj.optJSONObject("content")?.optString("text") ?: continue
+            val emojis=mapOf("[爱慕]" to "😍","[赞]" to "👍","[送花]" to "🌹","[笑哭]" to "😂","[大笑]" to "😄","[调皮]" to "😜","[色]" to "😍","[嘘]" to "🤫","[呆]" to "😳","[鼻血]" to "🤤","[来看]" to "👀","[666]" to "💯","[doge]" to "🐶","[舔屏]" to "😋","[惊喜]" to "🤩","[委屈]" to "😢","[流泪]" to "😭","[怒]" to "😠","[惊]" to "😮","[啊]" to "😱","[尴尬]" to "😅","[思考]" to "🤔","[得意]" to "😎","[坏笑]" to "😏","[爱心]" to "❤️","[心]" to "❤️","[ok]" to "👌","[鼓掌]" to "👏","[加油]" to "💪","[牛]" to "🐂","[跪了]" to "🙇","[拜]" to "🙏","[睡]" to "😴","[困]" to "😪","[累]" to "😩","[冷]" to "🥶","[热]" to "🥵","[饿]" to "😋","[胖]" to "🐷","[美]" to "🌸","[帅]" to "😎","[富]" to "💰","[火]" to "🔥","[666]" to "💯","[哈哈]" to "😂","[哈哈哈]" to "😂","[泪]" to "😭","[喷]" to "🤯","[划掉]" to "🗑️","[抠鼻]" to "👃","[白眼]" to "🙄","[哈欠]" to "🥱","[舔]" to "😋","[吻]" to "😘","[抱]" to "🤗","[握手]" to "🤝","[强]" to "👍","[弱]" to "👎","[顶]" to "👆","[踩]" to "👇","[回]" to "🔙","[有]" to "✅","[无]" to "❌","[钱]" to "💰","[买]" to "🛒","[卖]" to "🏷️","[车]" to "🚗","[房]" to "🏠","[猫]" to "🐱","[狗]" to "🐶","[鱼]" to "🐟","[花]" to "🌸","[月]" to "🌙","[日]" to "☀️","[星]" to "⭐","[雨]" to "🌧️","[雪]" to "❄️","[雷]" to "⚡","[火]" to "🔥","[水]" to "💧","[山]" to "⛰️","[海]" to "🌊","[路]" to "🛤️","[桥]" to "🌉","[楼]" to "🏢","[玩]" to "🎮","[乐]" to "🎉","[喜]" to "😊","[爱]" to "❤️","[情]" to "💘")
+            var processed=text
+            for((k,v) in emojis) processed=processed.replace(k,v)
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
-            if(expand!=null) {
-                timeMs=expand.optLong("offset_time",expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L)))))
-            }
-            if(timeMs==0L) {
-                val extra=expand?.optJSONObject("extra")
-                if(extra!=null) timeMs=extra.optLong("offset",extra.optLong("video_offset",0L))
-            }
-            pending.add(Dm(timeMs,text,0f,0f,0f))
+            if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L)))))
+            pending.add(Dm(timeMs,processed,0f,0f,0f))
         }
         pending.sortBy { it.time }
         invalidate()
