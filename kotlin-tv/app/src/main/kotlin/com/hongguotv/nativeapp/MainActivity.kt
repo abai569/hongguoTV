@@ -964,7 +964,7 @@ class MainActivity: Activity() {
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) setOnTouchListener { _,event ->
                     if(event.action==android.view.MotionEvent.ACTION_UP) {
-                        player?.playWhenReady=!(player?.playWhenReady ?: true)
+                        if(panel) hidePanel() else showPanel()
                     }
                     true
                 }

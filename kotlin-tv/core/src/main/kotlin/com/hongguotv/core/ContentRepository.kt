@@ -163,33 +163,47 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val vid=info.str("video_id")
         val durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
         runCatching {
-            val bodyObj=JSONObject().apply {
-                put("comment_source",601)
-                put("server_channel",1000)
-                put("group_id",vid)
-                put("group_type",30)
-                put("comment_type",20)
-                put("sort",1)
-                put("business_param",JSONObject().apply {
-                    put("book_id",id)
-                    put("start_offset_time",0)
-                    put("playlet_item_duration",durationMs)
-                    put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
-                })
-                put("count",90)
-                put("cursor","")
-                put("aid",8662)
-                put("compliance_status",0)
+            // try multiple parameter combos
+            val combos=listOf(
+                Triple(id, 30, id),           // numeric id as group_id, book_id
+                Triple(vid, 30, id),          // video_id as group_id
+                Triple(id, 1, id),            // group_type=1
+                Triple(id, 2, id),            // group_type=2
+                Triple(id, 10, id),           // group_type=10
+                Triple(id, 20, id),           // group_type=20
+                Triple(id, 40, id)            // group_type=40
+            )
+            combos.forEachIndexed { idx,(gid,gtype,bid) ->
+                runCatching {
+                    val bodyObj=JSONObject().apply {
+                        put("comment_source",601)
+                        put("server_channel",1000)
+                        put("group_id",gid)
+                        put("group_type",gtype)
+                        put("comment_type",20)
+                        put("sort",1)
+                        put("business_param",JSONObject().apply {
+                            put("book_id",bid)
+                            put("start_offset_time",0)
+                            put("playlet_item_duration",durationMs)
+                            put("need_danmaku_guide_type",org.json.JSONArray().apply { put(1);put(3);put(4);put(2) })
+                        })
+                        put("count",90)
+                        put("cursor","")
+                        put("aid",8662)
+                        put("compliance_status",0)
+                    }
+                    val bodyBytes=bodyObj.toString().toByteArray()
+                    val pathVid=if(gid.startsWith("v")) vid else id
+                    val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(pathVid,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
+                    val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
+                    val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
+                    extraHeaders.forEach { (k,v) -> request.header(k,v) }
+                    request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
+                    debug.append("\n[$idx] gid=$gid gtype=$gtype -> ").append(resp.take(200))
+                }.onFailure { debug.append("\n[$idx] FAIL: ${it.message}") }
             }
-            val bodyBytes=bodyObj.toString().toByteArray()
-            val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(vid,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
-            // add danmaku-specific headers
-            val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
-            val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
-            extraHeaders.forEach { (k,v) -> request.header(k,v) }
-            request.post(bodyBytes.toRequestBody("application/json; charset=utf-8".toMediaType()))
-            val resp=RequestScope.execute(http.newCall(request.build())) { it.body?.string() ?: "empty" }
-            debug.append(resp.take(1000))
         }.onFailure { debug.append("FAIL: ${it.message}") }
         return StreamInfo(url,key,quality).apply { debugRaw=info.toString()+"\n\n=== DANMAKU RESULT ===\n"+debug.toString() }
     }
