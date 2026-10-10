@@ -91,6 +91,7 @@ class MainActivity: Activity() {
     private var pauseIconRunnable=Runnable {}
     private var clockText: TextView?=null
     private var memberText: TextView?=null
+    private var lastBackPressed=0L
     private val clockRunnable=object: Runnable {
         override fun run() {
             val now=java.util.Date()
@@ -1373,7 +1374,7 @@ class MainActivity: Activity() {
         when(screen) {
             "player" -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> showCatalog()
-            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; catalog=emptyList(); hasMore=false; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(nav.any { it.hasFocus() }) { if(tab!=0) { switchTab(0); nav[0].requestFocus() } else finish() } else nav.getOrNull(tab)?.requestFocus()
+            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; catalog=emptyList(); hasMore=false; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(tab!=0) switchTab(0) else { if(System.currentTimeMillis()-lastBackPressed<2000) finish() else { lastBackPressed=System.currentTimeMillis(); android.widget.Toast.makeText(this,"再按一次退出",android.widget.Toast.LENGTH_SHORT).show() } }
         }
     }
     @Deprecated("TV remote back is handled through the activity")
