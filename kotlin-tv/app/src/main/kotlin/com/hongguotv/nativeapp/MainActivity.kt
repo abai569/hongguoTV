@@ -436,7 +436,6 @@ class MainActivity: Activity() {
             } else {
                 container.addView(types)
             }
-            }
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
         if(tab==1 && query.isNotBlank()) {
