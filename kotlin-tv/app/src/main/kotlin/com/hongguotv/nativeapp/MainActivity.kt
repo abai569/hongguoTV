@@ -403,8 +403,6 @@ class MainActivity: Activity() {
         invalidatePage(); screen="catalog"; releaseCatalogViews(); val container=base()
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val top=row().apply { setPadding(0,0,0,dp(8)) }
-        val brand=row()
-        top.addView(brand,lp(dp(120),dp(44)))
         listOf("首页","搜索","排行榜","收藏","最近观看","设置").forEachIndexed { index,label ->
             val item=addButton(top,label,index==tab) { switchTab(index) }
             fun paint(focused: Boolean) {
@@ -418,11 +416,14 @@ class MainActivity: Activity() {
             }; nav+=item
         }
         top.addView(Space(this),lp(0,1).apply { weight=1f })
-        val rightCol=row()
-        rightCol.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
+        val rightCol=column()
+        val topRow=row()
+        topRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
         clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END; val lp=lp(-2,-2); lp.gravity=Gravity.CENTER_VERTICAL }
+        topRow.addView(clockText)
+        rightCol.addView(topRow)
         memberText=text("",12f,Color.rgb(255,180,0)).apply { gravity=Gravity.END; setTypeface(null,Typeface.BOLD) }
-        rightCol.addView(clockText); rightCol.addView(memberText)
+        rightCol.addView(memberText)
         top.addView(rightCol)
         container.addView(top)
         container.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(6) })
