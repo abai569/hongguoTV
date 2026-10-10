@@ -1432,7 +1432,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             val currentPos=currentPosProvider?.invoke() ?: 0L
             while(pending.isNotEmpty() && pending[0].time<=currentPos) {
                 val dm=pending.removeAt(0)
-                active.add(dm.copy(x=w, y=randomY(h), speed=8f+Math.random()*4f))
+                active.add(dm.copy(x=w, y=randomY(h), speed=8f+(Math.random()*4).toFloat()))
             }
             lastPos=currentPos
         }
