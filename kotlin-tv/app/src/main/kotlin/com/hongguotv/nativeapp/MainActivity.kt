@@ -965,7 +965,7 @@ class MainActivity: Activity() {
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) {
                     var startX=0f; var startPos=0L; var dragging=false
-                    view.setOnTouchListener { _,event ->
+                    setOnTouchListener { _,event ->
                         when(event.action) {
                             android.view.MotionEvent.ACTION_DOWN -> { startX=event.x; startPos=player?.currentPosition ?: 0L; dragging=false }
                             android.view.MotionEvent.ACTION_MOVE -> {
@@ -974,7 +974,7 @@ class MainActivity: Activity() {
                                 if(dragging) {
                                     val dur=player?.duration ?: 0L
                                     if(dur>0) {
-                                        val delta=(dx/ view.width * dur).toLong()
+                                        val delta=(dx/ width * dur).toLong()
                                         val newPos=(startPos+delta).coerceIn(0,dur)
                                         progressBar.progress=(newPos*1000/dur).toInt()
                                         playbackText.text="拖动  ${formatTime(newPos)} / ${formatTime(dur)}"
@@ -985,7 +985,7 @@ class MainActivity: Activity() {
                                 if(dragging) {
                                     val dur=player?.duration ?: 0L
                                     if(dur>0) {
-                                        val delta=((event.x-startX)/ view.width * dur).toLong()
+                                        val delta=((event.x-startX)/ width * dur).toLong()
                                         player?.seekTo((startPos+delta).coerceIn(0,dur))
                                     }
                                 } else { if(panel) hidePanel() else showPanel() }
