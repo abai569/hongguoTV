@@ -494,7 +494,7 @@ class MainActivity: Activity() {
             area.addView(rightScroll,lp(0,-1).apply { weight=1f })
             container.addView(area)
             keyboard.setText(searchDraft)
-            val rightTarget=historyFlow?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
+            val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
             keyboard.linkRight(rightTarget)
             input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard.firstKeyId
             nav.forEach { it.nextFocusDownId=input.id }
