@@ -1391,6 +1391,7 @@ class MainActivity: Activity() {
     }
 }
 private class DanmakuView(context: android.content.Context): android.view.View(context) {
+    init { setWillNotDraw(false) }
     data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
