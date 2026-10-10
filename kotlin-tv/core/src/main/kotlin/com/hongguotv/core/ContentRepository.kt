@@ -137,6 +137,12 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
         return arr.objects().mapNotNull { it.optString("word").ifBlank { null } }.take(10)
     }
+    fun searchSuggestRaw(keyword: String): String {
+        val values=VendorConstants.device.toMutableMap()
+        values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0"))
+        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/search/suggest/v/",values)
+        return text(signed.url,signed).take(500)
+    }
     fun detail(id: String): Detail {
         require(id.matches(Regex("[0-9]{1,30}")))
         val o=router("$site/detail?series_id=$id").optJSONObject("detail_page")?.optJSONObject("seriesDetail") ?: throw IOException("剧集详情暂不可用")
