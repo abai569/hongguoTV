@@ -170,7 +170,7 @@ class MainActivity: Activity() {
     private var pausedForLifecycle=false
     private lateinit var hud: LinearLayout
     private lateinit var playbackText: TextView
-    private lateinit var progressBar: ProgressBar
+    private lateinit var progressBar: android.widget.SeekBar
     private lateinit var controls: LinearLayout
     private var panel=false
     private var transportPlay: TextView?=null
@@ -976,7 +976,11 @@ class MainActivity: Activity() {
             hud=column().apply { setPadding(dp(widthDp()*.05f),dp(20),dp(widthDp()*.05f),(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,15,21))) }
             playbackTitle=text("",23f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setTypeface(null,Typeface.BOLD) }; hud.addView(playbackTitle)
             playbackText=text("",15f,muted).apply { setPadding(0,dp(10),0,dp(9)) }; hud.addView(playbackText)
-            progressBar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=1000; progressTintList=android.content.res.ColorStateList.valueOf(accent); progressBackgroundTintList=android.content.res.ColorStateList.valueOf(surface) }; hud.addView(progressBar,lp(-1,dp(4)))
+            progressBar=android.widget.SeekBar(this).apply { max=1000; progressTintList=android.content.res.ColorStateList.valueOf(accent); progressBackgroundTintList=android.content.res.ColorStateList.valueOf(surface); setOnSeekBarChangeListener(object: android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) { if(fromUser && progressBar.isPressed) { player?.duration?.let { dur -> if(dur>0) player?.seekTo(p.toLong()*dur/1000) } } }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+            }) }; hud.addView(progressBar,lp(-1,dp(16)))
             hud.addView(text("确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 更多    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply { isVerticalScrollBarEnabled=false; addView(hud) },FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
@@ -1120,7 +1124,7 @@ class MainActivity: Activity() {
         val duration=p.duration.coerceAtLeast(0); val position=pendingSeek ?: p.currentPosition
         val state=when { p.playbackState==Player.STATE_BUFFERING -> "缓冲中"; p.playbackState==Player.STATE_ENDED -> "本集已结束"; !p.playWhenReady -> "已暂停"; else -> "正在播放" }
         playbackText.text="$state  ·  ${formatTime(position)} / ${formatTime(duration)}  ·  $quality  ·  ${PlaybackSpeed.label(p.playbackParameters.speed)}"+(if(sleepTimer.active) "  ·  定时 ${sleepTimer.label()}" else "")
-        progressBar.progress=if(duration>0) (position*1000/duration).toInt().coerceIn(0,1000) else 0
+        if(!progressBar.isPressed) progressBar.progress=if(duration>0) (position*1000/duration).toInt().coerceIn(0,1000) else 0
     }
     private fun requestPlayback(play: Boolean) {
         requestedAutoplay=play; pausedForLifecycle=!play
@@ -1195,6 +1199,8 @@ class MainActivity: Activity() {
         panel=true; showHud(); controls.visibility=View.VISIBLE; controls.removeAllViews()
         val transport=row(); controls.addView(transport)
         val play=addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
+        addButton(transport,"快退10秒") { player?.seekTo((player?.currentPosition ?: 0)-10000) }
+        addButton(transport,"快进10秒") { player?.seekTo((player?.currentPosition ?: 0)+10000) }
         addButton(transport,"上一集") { if(episodeIndex>0) playEpisode(episodeIndex-1) }.apply { isEnabled=episodeIndex>0; isFocusable=episodeIndex>0; alpha=if(episodeIndex>0) 1f else .4f }
         addButton(transport,"下一集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
         val options=row().apply { setPadding(0,dp(8),0,0) }; controls.addView(options)
@@ -1402,7 +1408,8 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
         for(i in 0 until raw.length()) {
             val item=raw.optJSONObject(i) ?: continue
             val commentObj=item.optJSONObject("comment") ?: continue
-            val text=commentObj.optJSONObject("content")?.optString("text") ?: continue
+            val commonObj=commentObj.optJSONObject("common") ?: continue
+            val text=commonObj.optJSONObject("content")?.optString("text") ?: continue
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) {
