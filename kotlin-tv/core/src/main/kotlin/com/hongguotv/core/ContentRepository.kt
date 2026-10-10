@@ -166,8 +166,9 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         runCatching {
             val allDanmaku=JSONArray()
             var cursor=""
-            while(true) {
-                runCatching {
+            var shouldStop=false
+            while(!shouldStop) {
+                try {
                     val bodyObj=JSONObject().apply {
                         put("comment_source",601)
                         put("server_channel",1000)
@@ -200,8 +201,11 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     }
                     val hasMore=respJson.optJSONObject("data")?.optBoolean("has_more",false) ?: false
                     cursor=respJson.optJSONObject("data")?.optString("cursor","") ?: ""
-                    if(!hasMore || cursor.isEmpty()) break
-                }.onFailure { debug.append("\ncursor ${cursor.take(20)} FAIL: ${it.message}"); break }
+                    if(!hasMore || cursor.isEmpty()) shouldStop=true
+                } catch(e: Exception) {
+                    debug.append("\ncursor ${cursor.take(20)} FAIL: ${e.message}")
+                    shouldStop=true
+                }
             }
             debug.append("\nTotal danmaku: ${allDanmaku.length()}")
             if(allDanmaku.length()>0) {
