@@ -1405,7 +1405,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) {
-                timeMs=expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L))))
+                timeMs=expand.optLong("offset_time",expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L)))))
             }
             if(timeMs==0L) {
                 val extra=expand?.optJSONObject("extra")
