@@ -40,7 +40,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=168
+          export HONGGUOTV_VERSION_CODE=169
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
@@ -53,8 +53,8 @@ jobs:
           set -euo pipefail
           version="${VERSION#kotlin-v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tv_apk="hongguotv-kotlin-${version}-android8.apk"
-          phone_apk="hongguotv-${version}-v8a.apk"
+          tv_apk="juyingtv-${version}-v7a.apk"
+          phone_apk="juying-${version}-v8a.apk"
           echo "TV_APK=$tv_apk" >> "$GITHUB_ENV"
           echo "PHONE_APK=$phone_apk" >> "$GITHUB_ENV"
           mv kotlin-tv/app/build/outputs/apk/tv/debug/app-tv-debug.apk "$tv_apk"

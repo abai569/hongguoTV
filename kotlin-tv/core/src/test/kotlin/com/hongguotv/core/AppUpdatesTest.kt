@@ -38,7 +38,7 @@ class AppUpdatesTest {
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("tag", "../../other").toString(), "com.hongguotv.nativeapp") }
     }
     @Test fun legacyArtifactNamesStillParse() {
-        for (name in listOf("hongguotv-1.6.2.apk", "hongguotv-kotlin-0.9.0-build.1-android8.apk", "橘影-1.6.7-v8a.apk", "橘影tv-1.6.7-v7a.apk")) {
+        for (name in listOf("hongguotv-1.6.2.apk", "hongguotv-kotlin-0.9.0-build.1-android8.apk", "橘影-1.6.7-v8a.apk", "橘影tv-1.6.7-v7a.apk", "juying-1.6.9-v8a.apk", "juyingtv-1.6.9-v7a.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", name)
             assertEquals(name, AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp").fileName)
         }
