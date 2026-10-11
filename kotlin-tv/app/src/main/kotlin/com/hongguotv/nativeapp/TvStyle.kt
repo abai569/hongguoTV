@@ -4,8 +4,8 @@ package com.hongguotv.nativeapp
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.TransitionDrawable
 import android.view.View
-import android.view.animation.DecelerateInterpolator
 
 /** Shared native colors and shapes; no blur, bitmap backgrounds or focus animation. */
 object TvStyle {
@@ -22,10 +22,12 @@ object TvStyle {
         setStroke((2*context.resources.displayMetrics.density).toInt(),border)
     }
     fun card(context: Context,focused: Boolean)=shape(context,if(focused) raised else surface,if(focused) accent else Color.TRANSPARENT)
-    /** Ease the focus highlight with a short scale-in so the selection no longer snaps. */
+    /** Unfocused and focused layers for one item; focus cross-fades between them without resizing. */
+    fun focusBackground(context: Context,selected: Boolean=false)=TransitionDrawable(arrayOf(
+        shape(context,if(selected) Color.rgb(61,39,34) else surface,Color.TRANSPARENT),
+        shape(context,raised,accent)))
+    /** Fade the focus highlight instead of snapping the background. */
     fun animateFocus(view: View,focused: Boolean) {
-        view.animate().cancel()
-        val scale=if(focused) 1.05f else 1f
-        view.animate().scaleX(scale).scaleY(scale).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+        (view.background as? TransitionDrawable)?.apply { if(focused) startTransition(130) else reverseTransition(130) }
     }
 }

@@ -91,6 +91,8 @@ class MainActivity: Activity() {
     private var lastTapTime=0L
     private var pauseIcon: android.widget.ImageView?=null
     private var pauseIconRunnable=Runnable {}
+    private var playerPlaceholder: android.widget.ImageView?=null
+    private var playerSpinner: View?=null
     private var clockText: TextView?=null
     private var memberText: TextView?=null
     private var lastBackPressed=0L
@@ -224,8 +226,8 @@ class MainActivity: Activity() {
     private fun lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
     private fun rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
-    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; clipChildren=false; clipToPadding=false }
-    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; clipChildren=false; clipToPadding=false }
+    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
     private val isTvDevice by lazy {
         packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
         !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
@@ -233,8 +235,8 @@ class MainActivity: Activity() {
     private fun focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true
         if(isTvDevice) view.isFocusableInTouchMode=true
-        fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) Color.rgb(61,39,34) else surface,if(focused) accent else Color.TRANSPARENT) }
-        paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused); TvStyle.animateFocus(view,focused) }
+        view.background=TvStyle.focusBackground(this,selected)
+        view.setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(view,focused) }
     }
     private fun button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = text(label,18f).apply {
         gravity=Gravity.CENTER; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(42); focusStyle(this,selected); setOnClickListener { onClick() }
@@ -244,14 +246,14 @@ class MainActivity: Activity() {
     }
     private fun addChips(parent: LinearLayout,pills: List<Pair<String,()->Unit>>): FlowLayout {
         val context=this
-        val flow=FlowLayout(context,dp(8),dp(8)).apply { clipChildren=false; clipToPadding=false }
+        val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
                 text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
-                background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
-                setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8); TvStyle.animateFocus(this,focused) }
+                background=TvStyle.focusBackground(context)
+                setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(this,focused) }
                 setOnClickListener { action() }
             }
             flow.addView(chip,ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -561,8 +563,14 @@ class MainActivity: Activity() {
                 work({ repository.homeCategories() }, { sections ->
                     homeRank=sections; homeFromCache=false
                     sections.forEach { (type,pageData) -> library.cacheRank(type,pageData.items,pageData.hasMore) }
-                    val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
-                    body.removeAllViews(); catalogGrid(body,keepNav,keepType)
+                    val home=homeScreen
+                    if(home!=null && screen=="catalog") {
+                        home.updateShelves(if(requestTab==2) rankShelves(true) else homeShelves(),requestFocus=false)
+                        home.refreshSelection(); home.refresh.text="刷新热门"
+                    } else {
+                        val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
+                        body.removeAllViews(); catalogGrid(body,keepNav,keepType)
+                    }
                 }, { problem ->
                     if(homeFromCache) {
                         homeScreen?.refresh?.text="当前显示上次内容 · 联网后按确认刷新"
@@ -613,7 +621,7 @@ class MainActivity: Activity() {
         catalogPageKey="$tab:${collection.orEmpty()}:$page:$query"
         val showRank=tab==2 || collectionRank!=null
         val preview=if(tab==1) null else SeriesPreview(this).also { selectionPreview=it; body.addView(it) }
-        val scroll=ScrollView(this).apply { isFillViewport=false; isVerticalScrollBarEnabled=false; clipToPadding=false }; catalogScroll=scroll
+        val scroll=SmoothScrollView(this).apply { isFillViewport=false }; catalogScroll=scroll
         val list=column(); scroll.addView(list); body.addView(scroll,lp(-1,0).apply { weight=1f })
         var restoringScroll=true
         val displayed=if(localCatalog()) catalog.drop((page-1)*pageSize).take(pageSize) else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog.take(30)
@@ -649,7 +657,7 @@ class MainActivity: Activity() {
                 card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
                 card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
-                card.setOnFocusChangeListener { _,focused -> card.background=TvStyle.card(this,focused); if(focused) { catalogFocus=item.id; loadCover(image,item.cover); preview?.show(item,selectionStatus(item)); if(!restoringScroll) scroll.post { scroll.smoothScrollTo(0,when { line.top<scroll.scrollY -> line.top; line.bottom>scroll.scrollY+scroll.height -> (line.bottom-scroll.height).coerceAtLeast(0); else -> scroll.scrollY }) } } }
+                card.setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(card,focused); if(focused) { catalogFocus=item.id; loadCover(image,item.cover); preview?.show(item,selectionStatus(item)) } }
                 // The row measures its tallest card, then stretches siblings to keep badges aligned.
                 line.addView(card,lp(width,-1).apply { if(columnIndex<count-1) rightMargin=gap }); cards+=card
             }
@@ -938,7 +946,7 @@ class MainActivity: Activity() {
             val progress=library.progress(series.id)
             val target=ResumePlayback.target(result.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
             episodeIndex=target.index; group=episodeIndex/20
-            if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else showDetail(false)
+            if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else { prefetchEpisode(target.index); showDetail(false) }
         }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay) } })
     }
     private fun showDetail(focusEpisode: Boolean) {
@@ -1076,6 +1084,11 @@ class MainActivity: Activity() {
                 }
             }
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
+            val placeholder=android.widget.ImageView(this).apply { scaleType=android.widget.ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.BLACK) }
+            loadCover(placeholder,data.series.cover)
+            root.addView(placeholder,FrameLayout.LayoutParams(-1,-1)); playerPlaceholder=placeholder
+            playerSpinner=android.widget.ProgressBar(this).apply { indeterminateTintList=android.content.res.ColorStateList.valueOf(accent) }
+            root.addView(playerSpinner,FrameLayout.LayoutParams(dp(48),dp(48)).apply { gravity=android.view.Gravity.CENTER })
             pauseIcon=android.widget.ImageView(this).apply {
                 setImageResource(android.R.drawable.ic_media_pause); setColorFilter(android.graphics.Color.WHITE)
                 setPadding(dp(24),dp(24),dp(24),dp(24))
@@ -1102,16 +1115,15 @@ class MainActivity: Activity() {
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
         work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
-            // Set up danmaku
-            if(library.danmakuEnabled && remote.info.danmakuRaw.length()>0) {
-                danmakuView?.setData(remote.info.danmakuRaw); danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
-                danmakuNextOffset=60000L
+            if(library.danmakuEnabled) {
+                danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
+                val dur=remote.info.durationMs
+                danmakuNextOffset=(startPosition/15000L)*15000L
                 danmakuFetchRunnable?.let { main.removeCallbacks(it) }
                 danmakuFetchRunnable=object: Runnable {
                     override fun run() {
                         val p=player ?: return
                         val pos=p.currentPosition
-                        val dur=remote.info.durationMs
                         if(danmakuNextOffset<dur && pos>danmakuNextOffset-30000) {
                             val off=danmakuNextOffset
                             danmakuNextOffset+=15000
@@ -1122,7 +1134,7 @@ class MainActivity: Activity() {
                         if(danmakuNextOffset<dur) main.postDelayed(this,5000)
                     }
                 }
-                main.postDelayed(danmakuFetchRunnable!!,5000)
+                main.postDelayed(danmakuFetchRunnable!!,300)
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
@@ -1144,6 +1156,7 @@ class MainActivity: Activity() {
                             return
                         }
                         playbackReady=true
+                        playerPlaceholder?.visibility=View.GONE; playerSpinner?.visibility=View.GONE
                         if(firstReady) { firstReady=false; readySince=android.os.SystemClock.elapsedRealtime(); android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}") }
                         if(hud.visibility==View.VISIBLE) updatePlaybackText()
                     }
@@ -1158,6 +1171,7 @@ class MainActivity: Activity() {
                 override fun onRenderedFirstFrame() {
                     if(active() && firstFrame) {
                         firstFrame=false
+                        playerPlaceholder?.visibility=View.GONE; playerSpinner?.visibility=View.GONE
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${android.os.SystemClock.elapsedRealtime()-playbackStarted}")
                     }
                 }
@@ -1202,6 +1216,25 @@ class MainActivity: Activity() {
                     RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
+            } catch(_: Exception) { remote?.close() }
+        }
+    }
+    private fun prefetchEpisode(index: Int) {
+        val data=detail ?: return
+        val id=data.episodes.getOrNull(index) ?: return
+        val quality=library.maxQuality; val key="$id:$quality"
+        if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
+        if(connectivity.isActiveNetworkMetered || !networkAvailable()) return
+        cancelPrefetch(); prefetchedFor=key
+        val ticket=preparedNext.begin(key)
+        val http=okhttp3.OkHttpClient.Builder().connectTimeout(8,java.util.concurrent.TimeUnit.SECONDS).readTimeout(15,java.util.concurrent.TimeUnit.SECONDS).callTimeout(20,java.util.concurrent.TimeUnit.SECONDS).build()
+        val source=ContentRepository(http); prefetchHttp=http
+        val scope=RequestScope(); prefetchScope=scope
+        prefetchJob=prefetchWorker.submit {
+            var remote: RemoteVideo?=null
+            try {
+                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() } }
+                if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Episode prepared after opening detail")
             } catch(_: Exception) { remote?.close() }
         }
     }
@@ -1416,7 +1449,7 @@ class MainActivity: Activity() {
         speedDialog?.dismiss(); speedDialog=null
         main.removeCallbacks(hideHud); main.removeCallbacks(seekRunnable); pendingSeek=null
         playerListener?.let { player?.removeListener(it) }; playerListener=null
-        video?.close(); video=null; playerView?.player=null; playerView=null; danmakuView?.stop(); danmakuView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null
+        video?.close(); video=null; playerView?.player=null; playerView=null; danmakuView?.stop(); danmakuView=null; player?.release(); player=null; playbackReady=false; transportPlay=null; sleepButton=null; playerPlaceholder=null; playerSpinner=null
         closeTransport(playbackHttp); playbackHttp=null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }

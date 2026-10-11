@@ -50,20 +50,18 @@ class HomeScreen(
     private data class Row(val key: String,val block: LinearLayout,val lines: List<Line>,val cards: List<Card>)
     private val accent=TvStyle.accent
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
-    private fun shape(focus: Boolean)=TvStyle.card(context,focus)
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
-    private val scroll=ScrollView(context).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
-    private val contents=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
+    private val scroll=SmoothScrollView(context)
+    private val contents=LinearLayout(context).apply { orientation=VERTICAL }
     private val rows=mutableListOf<Row>()
     private val cards=linkedMapOf<String,Card>()
     private var shelves=emptyList<Shelf>()
     private var footerMore: (() -> Unit)?=null
     private var moreButton: View?=null
     private var lastFocus=""
-    private var lastRow: String?=null
     private var restoring=false
     private var revision=0
-    val refresh=label("正在更新热门…",13f).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=true; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(8),dp(12),dp(8)); background=shape(false); setOnFocusChangeListener { _,f -> background=shape(f); if(f) lastFocus=tag.toString() } }
+    val refresh=label("正在更新热门…",13f).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=true; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(8),dp(12),dp(8)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() } }
     init { orientation=VERTICAL; scroll.addView(contents); addView(scroll,LayoutParams(-1,0,1f)) }
 
     fun capturePosition(): Position {
@@ -102,10 +100,10 @@ class HomeScreen(
     fun render(shelves: List<Shelf>,focus: String,requestFocus: Boolean,more: (() -> Unit)?,position: Position?=null) {
         val previous=position ?: if(rows.isNotEmpty()) capturePosition() else null
         this.shelves=shelves; footerMore=more; revision++; val ticket=revision; restoring=true
-        contents.removeAllViews(); rows.clear(); cards.clear(); moreButton=null; lastRow=null
+        contents.removeAllViews(); rows.clear(); cards.clear(); moreButton=null
         var refreshPlaced=false
         shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
-            val block=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
+            val block=LinearLayout(context).apply { orientation=VERTICAL }
             val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(4),dp(2),dp(9)) }
             heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(14)).apply { rightMargin=dp(8) })
             heading.addView(label(shelf.title,16f).apply { setTypeface(null,Typeface.BOLD) },LayoutParams(0,-2,1f))
@@ -121,8 +119,8 @@ class HomeScreen(
             val rowCount=(totalCount+perRow-1)/perRow
             val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/perRow).toInt().coerceAtLeast(dp(100))
             for(rowIndex in 0 until rowCount) {
-                val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; clipChildren=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
-                val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP; clipChildren=false }
+                val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
+                val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
                 horizontal.addView(line); block.addView(horizontal)
                 val lineCards=mutableListOf<Card>()
                 for(columnIndex in 0 until perRow) {
@@ -131,7 +129,7 @@ class HomeScreen(
                     val entry=if(index<entries.size) entries[index] else null
                     val action=if(index<entries.size) null else moreAction!!
                     val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
-                    val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=shape(false) }
+                    val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=TvStyle.focusBackground(context) }
                     val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
                     view.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                     val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
@@ -146,15 +144,10 @@ class HomeScreen(
                         view.setOnKeyListener { _,code,event -> if(code==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { lastFocus=key; remember(key); card.entry?.let { actions(it.series,view) } }; true } else false }
                     }
                     view.setOnFocusChangeListener { _,focused ->
-                        view.background=shape(focused)
                         TvStyle.animateFocus(view,focused)
                         if(focused) {
                             lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
-                            if(!restoring) {
-                                loadNearbySelection()
-                                if(lastRow!=shelf.key) scroll.post { if(revision==ticket && view.hasFocus()) reveal(block) }
-                            }
-                            lastRow=shelf.key
+                            if(!restoring) loadNearbySelection()
                         }
                     }
                     line.addView(view,LayoutParams(width,-2).apply { rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
@@ -168,7 +161,7 @@ class HomeScreen(
         val footer=mutableListOf<View>()
         if(!refreshPlaced) footer+=refresh
         if(more!=null) {
-            val next=label("更多热门  ›",15f).apply { id=View.generateViewId(); tag="home:more"; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(12),dp(12),dp(12),dp(12)); background=shape(false); setOnFocusChangeListener { _,f -> background=shape(f); if(f) lastFocus=tag.toString() }; setOnClickListener { more() } }
+            val next=label("更多热门  ›",15f).apply { id=View.generateViewId(); tag="home:more"; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(12),dp(12),dp(12),dp(12)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() }; setOnClickListener { more() } }
             contents.addView(next,LayoutParams(-1,-2).apply { topMargin=dp(8) }); footer+=next; moreButton=next
         }
         val hotIndex=if(refreshPlaced) rows.indexOfFirst { it.key=="hot" } else -1
