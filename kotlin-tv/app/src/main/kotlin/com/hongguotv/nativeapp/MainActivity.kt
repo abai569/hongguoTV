@@ -26,6 +26,9 @@ import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
 import java.util.concurrent.Executors
 
+private const val REQ_EXPORT=9001
+private const val REQ_IMPORT=9002
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainActivity: Activity() {
     private val bg=TvStyle.background; private val surface=TvStyle.surface
@@ -202,6 +205,9 @@ class MainActivity: Activity() {
     private var transportPlay: TextView?=null
     private var sleepButton: TextView?=null
     private var speedDialog: AlertDialog?=null
+    private var pendingBackupJson: String?=null
+    private var userOrientation: Boolean?=null
+    private var orientationDecided=false
     private var pendingSeek: Long?=null
     private var playError=false
     private var lastSaved=0L
@@ -460,6 +466,8 @@ class MainActivity: Activity() {
             val strip=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
             strip.addView(navRow)
             top.addView(strip,lp(-1,-2).apply { topMargin=dp(8) })
+            val scrollTab=tab
+            strip.post { strip.post { nav.getOrNull(scrollTab)?.let { item -> strip.scrollTo((item.left-(strip.width-item.width)/2).coerceAtLeast(0),0) } } }
         } else {
             top.setPadding(0,0,0,dp(8))
             val topRow=row().apply { gravity=Gravity.END }
@@ -880,11 +888,12 @@ class MainActivity: Activity() {
     private fun settings(parent: LinearLayout) {
         parent.addView(text("按你的习惯播放",25f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL); setPadding(0,dp(15),0,dp(7)) })
         parent.addView(text("偏好自动保存，下一部剧继续使用。",13f,muted).apply { setPadding(0,0,0,dp(18)) })
-        val groups=row().apply { gravity=Gravity.TOP }
+        val groups=if(BuildConfig.CHANNEL=="phone") column() else row().apply { gravity=Gravity.TOP }
         val playback=column(); val device=column()
         listOf(playback,device).forEachIndexed { i,group ->
             group.setPadding(dp(16),dp(16),dp(16),dp(16)); group.background=rounded(surface)
-            groups.addView(group,lp(0,-2).apply { weight=1f; if(i==0) rightMargin=dp(16) })
+            if(BuildConfig.CHANNEL=="phone") groups.addView(group,lp(-1,-2).apply { if(i==0) bottomMargin=dp(12) })
+            else groups.addView(group,lp(0,-2).apply { weight=1f; if(i==0) rightMargin=dp(16) })
         }
         parent.addView(groups)
         fun heading(group: LinearLayout,title: String,subtitle: String) {
@@ -918,17 +927,8 @@ class MainActivity: Activity() {
             library.danmakuEnabled=!library.danmakuEnabled
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
-        lateinit var backup: TextView
-        backup=setting(device,"手机备份与恢复") {
-            runCatching { LibraryBackup.encode(library.snapshot()) }.onSuccess { encoded ->
-                tvTools.libraryTransfer(encoded,backup) { data,restoreSettings ->
-                    favoriteMonitor.stop(); library.restore(data,restoreSettings)
-                    tabState.clear(); tabFocus.clear(); catalogFocus=""; page=1
-                    showCatalog(); favoriteMonitor.check()
-                    Toast.makeText(this,"记录已合并恢复",Toast.LENGTH_LONG).show()
-                }
-            }.onFailure { tvTools.info("无法生成备份","本机记录暂时无法导出，请重试。",backup) }
-        }
+        val exportBtn=setting(device,"导出备份到本地") { exportBackup() }
+        val importBtn=setting(device,"从本地文件恢复") { importBackup() }
         lateinit var hidden: TextView
         hidden=setting(device,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
@@ -944,16 +944,59 @@ class MainActivity: Activity() {
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(backup,hidden,updates,debugBtn,license)
-        listOf(left,right).forEach { items -> items.forEachIndexed { index,view ->
-            view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
-            view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
-        } }
-        left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
-        right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,license)
+        if(BuildConfig.CHANNEL=="phone") {
+            (left+right).forEachIndexed { index,view ->
+                view.nextFocusUpId=(left+right).getOrNull(index-1)?.id ?: nav[tab].id
+                view.nextFocusDownId=(left+right).getOrNull(index+1)?.id ?: view.id
+                view.nextFocusLeftId=view.id; view.nextFocusRightId=view.id
+            }
+        } else {
+            listOf(left,right).forEach { items -> items.forEachIndexed { index,view ->
+                view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
+                view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
+            } }
+            left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
+            right.forEachIndexed { i,v -> v.nextFocusLeftId=left.getOrNull(i)?.id ?: v.id; v.nextFocusRightId=v.id }
+        }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
         parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
+    }
+    private fun exportBackup() {
+        val encoded=runCatching { LibraryBackup.encode(library.snapshot()) }.getOrElse {
+            Toast.makeText(this,"无法生成备份：${it.message ?: "请重试"}",Toast.LENGTH_LONG).show(); return
+        }
+        pendingBackupJson=encoded
+        val name="橘影备份-"+java.text.SimpleDateFormat("yyyyMMdd-HHmm",java.util.Locale.getDefault()).format(java.util.Date())+".json"
+        val intent=android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            .setType("application/json")
+            .putExtra(android.content.Intent.EXTRA_TITLE,name)
+        runCatching { startActivityForResult(intent,REQ_EXPORT) }.onFailure { Toast.makeText(this,"无法打开文件选择器",Toast.LENGTH_LONG).show() }
+    }
+    private fun importBackup() {
+        pendingBackupJson=null
+        val intent=android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(android.content.Intent.EXTRA_MIME_TYPES,arrayOf("application/json","text/plain","text/*","application/octet-stream"))
+        runCatching { startActivityForResult(intent,REQ_IMPORT) }.onFailure { Toast.makeText(this,"无法打开文件选择器",Toast.LENGTH_LONG).show() }
+    }
+    private fun confirmRestore(data: BackupData) {
+        val preview=column()
+        preview.addView(text("备份含 ${data.favorites.size} 部收藏、${data.history.size} 条观看记录、${data.searches.size} 条搜索、${data.later.size} 部稍后看、${data.hidden.size} 部已隐藏推荐。\n\n收藏合并，观看位置以较新的记录为准；已有收藏优先保留（最多 500 部），历史保留最近 200 条。",15f))
+        val includeSettings=CheckBox(this).apply { text="同时恢复播放设置和内容分类"; isChecked=false }
+        preview.addView(includeSettings)
+        AlertDialog.Builder(this).setTitle("确认恢复本机记录")
+            .setView(ScrollView(this).apply { addView(preview) })
+            .setNegativeButton("取消",null)
+            .setPositiveButton("合并恢复") { _,_->
+                favoriteMonitor.stop(); library.restore(data,includeSettings.isChecked)
+                tabState.clear(); tabFocus.clear(); catalogFocus=""; page=1
+                showCatalog(); favoriteMonitor.check()
+                Toast.makeText(this,"记录已合并恢复",Toast.LENGTH_LONG).show()
+            }.show()
     }
     private fun runSearch(value: String,type: ContentType=library.contentType) {
         val clean=value.trim(); if(clean.isEmpty() || clean.length>80) return
@@ -1112,7 +1155,7 @@ class MainActivity: Activity() {
         if(!recovering) recovery.reset()
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         if(autoplay) sleepStopped=false
-        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/episodeGroupSize(); if(BuildConfig.CHANNEL=="phone") requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else applyOrientation(true)
+        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/episodeGroupSize(); if(!reuse) { userOrientation=null; orientationDecided=false; if(BuildConfig.CHANNEL=="phone") requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else applyOrientation(true) }
         panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
         player?.playWhenReady=requestedAutoplay
         prefetchAttempts=0; prefetchAttemptAt=0
@@ -1123,13 +1166,16 @@ class MainActivity: Activity() {
                 useController=false; resizeMode=frameResizeMode(); isFocusable=false
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) {
-                    var startX=0f; var startPos=0L; var dragging=false
+                    var startX=0f; var startY=0f; var startPos=0L; var dragging=false; var vertical=false
                     setOnTouchListener { _,event ->
                         when(event.action) {
-                            android.view.MotionEvent.ACTION_DOWN -> { startX=event.x; startPos=player?.currentPosition ?: 0L; dragging=false }
+                            android.view.MotionEvent.ACTION_DOWN -> { startX=event.x; startY=event.y; startPos=player?.currentPosition ?: 0L; dragging=false; vertical=false }
                             android.view.MotionEvent.ACTION_MOVE -> {
-                                val dx=event.x-startX
-                                if(kotlin.math.abs(dx)>30 && !dragging) { dragging=true; showPanel() }
+                                val dx=event.x-startX; val dy=event.y-startY
+                                if(!dragging && !vertical) {
+                                    if(kotlin.math.abs(dy)>dp(28) && kotlin.math.abs(dy)>kotlin.math.abs(dx)) vertical=true
+                                    else if(kotlin.math.abs(dx)>30) { dragging=true; showPanel() }
+                                }
                                 if(dragging) {
                                     val dur=player?.duration ?: 0L
                                     if(dur>0) {
@@ -1141,7 +1187,14 @@ class MainActivity: Activity() {
                                 }
                             }
                             android.view.MotionEvent.ACTION_UP -> {
-                                if(dragging) {
+                                val dy=event.y-startY
+                                if(vertical) {
+                                    val last=(detail?.episodes?.lastIndex ?: 0)
+                                    when {
+                                        dy<=-dp(56) -> if(episodeIndex<last) playEpisode(episodeIndex+1) else Toast.makeText(this@MainActivity,"已经是最后一集",Toast.LENGTH_SHORT).show()
+                                        dy>=dp(56) -> if(episodeIndex>0) playEpisode(episodeIndex-1) else Toast.makeText(this@MainActivity,"已经是第一集",Toast.LENGTH_SHORT).show()
+                                    }
+                                } else if(dragging) {
                                     val dur=player?.duration ?: 0L
                                     if(dur>0) {
                                         val delta=((event.x-startX)/ width * dur).toLong()
@@ -1268,6 +1321,8 @@ class MainActivity: Activity() {
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) syncMediaSession() }
                 override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                     if(!active() || videoSize.width<=0 || videoSize.height<=0) return
+                    if(userOrientation!=null || orientationDecided) return
+                    orientationDecided=true
                     applyVideoOrientation(videoSize.height>videoSize.width)
                 }
                 override fun onPlayerError(error: PlaybackException) { if(active()) playerFailure(error) }
@@ -1471,6 +1526,7 @@ class MainActivity: Activity() {
                 }
             })
         }.apply { tag="playback-settings" }
+        if(BuildConfig.CHANNEL=="phone") addButton(transport,if(requestedOrientation==android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) "横屏" else "竖屏") { toggleOrientation(); showPanel() }
         transportPlay?.requestFocus()
     }
     private fun showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
@@ -1596,9 +1652,37 @@ class MainActivity: Activity() {
         super.onConfigurationChanged(newConfig)
         if(!library.isLoaded) return
         when(screen) {
-            "player" -> { val position=currentPosition(); val autoplay=player?.playWhenReady==true && !pausedForLifecycle; playEpisode(episodeIndex,position,autoplay) }
+            "player" -> { if(player!=null) { syncMediaSession(); if(hud.visibility==View.VISIBLE) updatePlaybackText() } }
             "detail" -> if(detail!=null) showDetail(false)
             else -> showCatalog()
+        }
+    }
+    private fun toggleOrientation() {
+        if(BuildConfig.CHANNEL!="phone") return
+        val portraitNow=requestedOrientation==android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        val wantPortrait=!portraitNow
+        userOrientation=wantPortrait
+        applyVideoOrientation(wantPortrait)
+    }
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int,resultCode: Int,data: android.content.Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if(resultCode!=RESULT_OK) { pendingBackupJson=null; return }
+        val uri=data?.data ?: return
+        when(requestCode) {
+            REQ_EXPORT -> {
+                val json=pendingBackupJson ?: return
+                pendingBackupJson=null
+                runCatching {
+                    contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) } ?: throw java.io.IOException("无法写入所选位置")
+                }.onSuccess { Toast.makeText(this,"备份已保存到本地",Toast.LENGTH_LONG).show() }
+                    .onFailure { Toast.makeText(this,"保存失败：${it.message ?: "请重试"}",Toast.LENGTH_LONG).show() }
+            }
+            REQ_IMPORT -> runCatching {
+                val text=contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: throw java.io.IOException("无法读取所选文件")
+                LibraryBackup.decode(text)
+            }.onSuccess { confirmRestore(it) }
+                .onFailure { Toast.makeText(this,"恢复失败：${it.message ?: "文件无效"}",Toast.LENGTH_LONG).show() }
         }
     }
     override fun onResume() {
