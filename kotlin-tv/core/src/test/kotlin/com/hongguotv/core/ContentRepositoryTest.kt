@@ -254,7 +254,7 @@ class ContentRepositoryTest {
             queries += request.url.queryParameter("query") ?: ""
             when {
                 request.url.encodedPath.contains("incent_resource/suggestion") ->
-                    """{"code":0,"suggest_list":[{"word":"我合成了全世界"}]}"""
+                    """{"status":200,"data":{"suggest_list":[{"name":"我合成了全世界"}]}}"""
                 request.url.queryParameter("query") == "WHCLQSJ" ->
                     """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false}]}"""
                 else -> """{"code":0,"search_tabs":[${searchTab(11,"321")}]}"""
