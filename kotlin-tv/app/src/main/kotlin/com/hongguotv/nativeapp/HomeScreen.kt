@@ -108,7 +108,7 @@ class HomeScreen(
             heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(14)).apply { rightMargin=dp(8) })
             heading.addView(label(shelf.title,16f).apply { setTypeface(null,Typeface.BOLD) },LayoutParams(0,-2,1f))
             if(shelf.key=="hot" && !refreshPlaced) { heading.addView(refresh,LayoutParams(-2,-2).apply { leftMargin=dp(8) }); refreshPlaced=true }
-            else heading.addView(label("左右选剧  ·  上下切换分区",10f,TvStyle.muted))
+            else if(BuildConfig.CHANNEL=="tv") heading.addView(label("左右选剧  ·  上下切换分区",10f,TvStyle.muted))
             block.addView(heading)
             val lines=mutableListOf<Line>()
             val rowCards=mutableListOf<Card>()
@@ -216,7 +216,7 @@ class HomeScreen(
         cards[key]?.let { return it.view }
         if(position!=null) {
             val row=rows.firstOrNull { it.key==position.shelf } ?: rows.getOrNull(position.row.coerceAtMost(rows.lastIndex))
-            val perRow=6
+            val perRow=shelves.firstOrNull { it.key==row?.key }?.perRow ?: 6
             val lineIndex=(position.column/perRow).coerceIn(0,(row?.lines?.size ?: 1)-1)
             val colInLine=(position.column%perRow).coerceIn(0,perRow-1)
             row?.lines?.getOrNull(lineIndex)?.cards?.getOrNull(colInLine)?.let { return it.view }

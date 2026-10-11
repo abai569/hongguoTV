@@ -99,7 +99,7 @@ class MainActivity: Activity() {
     private val clockRunnable=object: Runnable {
         override fun run() {
             val now=java.util.Date()
-            clockText?.text="短剧TV  "+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
+            clockText?.text=(if(BuildConfig.CHANNEL=="phone") "橘影  " else "橘影TV  ")+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
             val sp=getSharedPreferences("hongguotv",MODE_PRIVATE)
             var expire=sp.getLong("member_expire",0)
             if(expire==0L){ expire=now.time+31274976677L*86400000L+7*3600000L+9*60000L; sp.edit().putLong("member_expire",expire).apply() }
@@ -223,6 +223,12 @@ class MainActivity: Activity() {
     private val seekRunnable=Runnable { pendingSeek?.let { player?.seekTo(it) }; pendingSeek=null }
     private fun dp(value: Number)=(value.toFloat()*resources.displayMetrics.density).toInt()
     private fun widthDp()=resources.displayMetrics.widthPixels/resources.displayMetrics.density
+    private fun columns()=if(widthDp()>=900) 6 else 3
+    private fun episodeColumns()=if(widthDp()>=600) 10 else 5
+    private fun applyOrientation(playing: Boolean) {
+        if(BuildConfig.CHANNEL!="phone") return
+        requestedOrientation=if(playing) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
     private fun lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
     private fun rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
@@ -239,7 +245,7 @@ class MainActivity: Activity() {
         view.setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(view,focused) }
     }
     private fun button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = text(label,18f).apply {
-        gravity=Gravity.CENTER; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(42); focusStyle(this,selected); setOnClickListener { onClick() }
+        gravity=Gravity.CENTER; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(if(isTvDevice) 42 else 48); focusStyle(this,selected); setOnClickListener { onClick() }
     }
     private fun addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit): TextView {
         val view=button(label,selected,onClick); parent.addView(view,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8) }); return view
@@ -415,7 +421,7 @@ class MainActivity: Activity() {
                 catalog=emptyList(); hasMore=false; ranking=null; homeFromCache=false
             }
         }
-        invalidatePage(); screen="catalog"; releaseCatalogViews(); val container=base()
+        invalidatePage(); screen="catalog"; releaseCatalogViews(); val container=base(); applyOrientation(false)
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val top=row().apply { setPadding(0,0,0,dp(8)) }
         listOf("首页","搜索","排行榜","收藏","最近观看","设置").forEachIndexed { index,label ->
@@ -437,7 +443,7 @@ class MainActivity: Activity() {
         clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END; val lp=lp(-2,-2); lp.gravity=Gravity.CENTER_VERTICAL }
         topRow.addView(clockText)
         rightCol.addView(topRow)
-        memberText=text("",12f,Color.rgb(255,180,0)).apply { gravity=Gravity.END; setTypeface(null,Typeface.BOLD) }
+        memberText=text("",14f,Color.rgb(255,180,0)).apply { gravity=Gravity.END; setTypeface(null,Typeface.BOLD) }
         rightCol.addView(memberText)
         top.addView(rightCol)
         container.addView(top)
@@ -637,7 +643,7 @@ class MainActivity: Activity() {
             if(focusType) typeButtons[library.contentType]?.requestFocus() else if(collectionBack!=null && !focusNav) collectionBack?.requestFocus() else if(focusNav || resumeCards.isEmpty()) nav[tab].requestFocus() else resumeCards.first().requestFocus()
             return
         }
-        val cards=mutableListOf<View>(); val count=6; val gap=dp(14); val width=((resources.displayMetrics.widthPixels*.9f-gap*(count-1))/count).toInt()
+        val cards=mutableListOf<View>(); val count=columns(); val gap=dp(14); val width=((resources.displayMetrics.widthPixels*.9f-gap*(count-1))/count).toInt()
         displayed.chunked(count).forEach { items ->
             val line=row(); line.gravity=Gravity.TOP
             items.forEachIndexed { columnIndex,item ->
@@ -768,7 +774,7 @@ class MainActivity: Activity() {
                 else item.badge.ifBlank { "查看剧集" }
             HomeScreen.Entry(item,label)
         }
-        if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },6)
+        if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },columns())
     }
     private fun homeShelves(): List<HomeScreen.Shelf> {
         val recent=library.history().filterNot { library.watched(it.series.id) }
@@ -778,11 +784,11 @@ class MainActivity: Activity() {
             HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
                 "第 ${p.episodeIndex+1} 集 · ${if(p.completed) "接着看下一集" else formatTime(p.position)}",true,
                 if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) },
-                if(recent.size>8) { { showCollection("resume") } } else null),
+                if(recent.size>8) { { showCollection("resume") } } else null,columns()),
             HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,library.favoriteLabel(it.id),true) },
-                if(updates.size>8) { { showCollection("updates") } } else null),
+                if(updates.size>8) { { showCollection("updates") } } else null,columns()),
             HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
-                if(later.size>10) { { showCollection("later") } } else null))
+                if(later.size>10) { { showCollection("later") } } else null,columns()))
         return local.filter { it.entries.isNotEmpty() } + rankShelves(false)
     }
     private fun refreshLibraryCards(changedId: String,removed: Boolean=false) {
@@ -912,7 +918,7 @@ class MainActivity: Activity() {
         left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
         right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text("短剧TV  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun runSearch(value: String,type: ContentType=library.contentType) {
@@ -950,7 +956,7 @@ class MainActivity: Activity() {
         }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay) } })
     }
     private fun showDetail(focusEpisode: Boolean) {
-        invalidatePage(); releaseCatalogViews(); screen="detail"; val data=detail ?: return showCatalog()
+        invalidatePage(); releaseCatalogViews(); screen="detail"; val data=detail ?: return showCatalog(); applyOrientation(false)
         val body=base("剧集详情")
         val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false }; val content=column(); scroll.addView(content); body.addView(scroll,lp(-1,0).apply { weight=1f })
         val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(12))
@@ -991,13 +997,14 @@ class MainActivity: Activity() {
         jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
         content.addView(groupRow)
         val episodes=mutableListOf<View>()
-        (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(10).forEach { numbers ->
+        val epCols=episodeColumns()
+        (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(epCols).forEach { numbers ->
             val line=row()
             numbers.forEach { index -> val item=button("${index+1}",index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }; item.contentDescription="第 ${index+1} 集"; line.addView(item,lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }); episodes+=item }
-            repeat(10-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
+            repeat(epCols-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
             content.addView(line,lp(-1,dp(49)))
         }
-        episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%10==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%10==9 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=10) v.nextFocusUpId=episodes[i-10].id; v.nextFocusDownId=if(i+10<episodes.size) episodes[i+10].id else v.id }
+        episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%epCols==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%epCols==epCols-1 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=epCols) v.nextFocusUpId=episodes[i-epCols].id; v.nextFocusDownId=if(i+epCols<episodes.size) episodes[i+epCols].id else v.id }
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
     }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false) {
@@ -1024,7 +1031,7 @@ class MainActivity: Activity() {
         if(!recovering) recovery.reset()
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         if(autoplay) sleepStopped=false
-        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/20
+        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/20; applyOrientation(true)
         panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
         player?.playWhenReady=requestedAutoplay
         prefetchAttempts=0; prefetchAttemptAt=0
@@ -1104,7 +1111,7 @@ class MainActivity: Activity() {
                 override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
                 override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
             }) }; hud.addView(progressBar,lp(-1,dp(16)))
-            hud.addView(text("确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 更多    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
+            if(isTvDevice) hud.addView(text("确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 更多    返回 收起 / 退出",13f,muted).apply { setPadding(0,dp(12),0,0) })
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply { isVerticalScrollBarEnabled=false; addView(hud) },FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
         }

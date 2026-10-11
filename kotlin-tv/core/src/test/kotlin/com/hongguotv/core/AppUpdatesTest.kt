@@ -15,7 +15,7 @@ class AppUpdatesTest {
         .put("versionCode", 10001).put("versionName", "0.9.0+1").put("minSdk", 26).put("tag", "kotlin-v0.9.0-build.1")
         .put("apk", JSONObject().put("name", "短剧TV-0.9.0-build.1.apk").put("size", bytes.size)
             .put("sha256", MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }))
-    private fun update() = AppUpdate.parse(json().toString())
+    private fun update() = AppUpdate.parse(json().toString(), "com.hongguotv.nativeapp")
     private fun withFile(block: (File) -> Unit) {
         val dir = Files.createTempDirectory("update-test").toFile()
         try { block(File(dir, "update.apk")) } finally { dir.deleteRecursively() }
@@ -33,28 +33,28 @@ class AppUpdatesTest {
         ), update().downloadUrls)
         for (value in listOf("../../bad.apk", "evil.apk", "https://example.com/evil.apk", "短剧TV-1/2.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", value)
-            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp") }
         }
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("tag", "../../other").toString()) }
+        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("tag", "../../other").toString(), "com.hongguotv.nativeapp") }
     }
     @Test fun legacyArtifactNamesStillParse() {
-        for (name in listOf("hongguotv-1.6.2.apk", "hongguotv-kotlin-0.9.0-build.1-android8.apk")) {
+        for (name in listOf("hongguotv-1.6.2.apk", "hongguotv-kotlin-0.9.0-build.1-android8.apk", "橘影-1.6.7-v8a.apk", "橘影tv-1.6.7-v7a.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", name)
-            assertEquals(name, AppUpdate.parse(o.toString()).fileName)
+            assertEquals(name, AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp").fileName)
         }
     }
     @Test fun rejectOtherPackageAndInvalidSchema() {
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("packageName", "other.app").toString()) }
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("schema", 2).toString()) }
+        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("packageName", "other.app").toString(), "com.hongguotv.nativeapp") }
+        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("schema", 2).toString(), "com.hongguotv.nativeapp") }
     }
     @Test fun enforceVersionSizeAndChecksumBounds() {
-        for (code in listOf(0L, -1L, Int.MAX_VALUE.toLong()+1)) assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("versionCode", code).toString()) }
+        for (code in listOf(0L, -1L, Int.MAX_VALUE.toLong()+1)) assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("versionCode", code).toString(), "com.hongguotv.nativeapp") }
         for (size in listOf(0L, -1L, AppUpdate.MAX_APK_BYTES+1)) {
             val o = json(); o.getJSONObject("apk").put("size", size)
-            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp") }
         }
         val o = json(); o.getJSONObject("apk").put("sha256", "invalid")
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp") }
     }
     @Test fun verifiedDownloadAtomicallyReplacesOldFile() = withFile { file ->
         file.writeText("previous"); val progress = mutableListOf<Int>()

@@ -9,11 +9,27 @@ android {
     namespace = "com.hongguotv.nativeapp"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.hongguotv.nativeapp"
         minSdk = 26
         targetSdk = 33
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 61
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "1.3.0"
+    }
+    flavorDimensions += "form"
+    productFlavors {
+        create("tv") {
+            applicationId = "com.hongguotv.nativeapp"
+            manifestPlaceholders["appLabel"] = "橘影TV"
+            manifestPlaceholders["orientation"] = "landscape"
+            buildConfigField("String", "CHANNEL", "\"tv\"")
+            buildConfigField("String", "UPDATE_FILE", "\"update.json\"")
+        }
+        create("phone") {
+            applicationId = "com.hongguotv.phone"
+            manifestPlaceholders["appLabel"] = "橘影"
+            manifestPlaceholders["orientation"] = "portrait"
+            buildConfigField("String", "CHANNEL", "\"phone\"")
+            buildConfigField("String", "UPDATE_FILE", "\"update-phone.json\"")
+        }
     }
     buildFeatures { buildConfig = true }
     signingConfigs {

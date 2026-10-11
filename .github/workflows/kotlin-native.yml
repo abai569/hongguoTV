@@ -40,11 +40,11 @@ jobs:
           else
             version="0.8.1"
           fi
-           export HONGGUOTV_VERSION_CODE=166
+          export HONGGUOTV_VERSION_CODE=167
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
-          ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintDebug :app:assembleDebug --console=plain
+          ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintTvDebug :app:lintPhoneDebug :app:assembleDebug --console=plain
       - name: Prepare tagged APK
         if: startsWith(github.ref, 'refs/tags/kotlin-v')
         env:
@@ -53,13 +53,17 @@ jobs:
           set -euo pipefail
           version="${VERSION#kotlin-v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          apk="hongguotv-kotlin-${version}-android8.apk"
-          mv kotlin-tv/app/build/outputs/apk/debug/app-debug.apk "$apk"
-          size=$(stat -c%s "$apk")
-          sha=$(sha256sum "$apk" | awk '{print $1}')
-          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":26,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"Kotlin TV %s"}\n' \
-            "$HONGGUOTV_VERSION_CODE" "$version" "$VERSION" "$apk" "$size" "$sha" "$version" > update.json
-          sha256sum "$apk" update.json > SHA256SUMS
+          tv_apk="橘影tv-${version}-v7a.apk"
+          phone_apk="橘影-${version}-v8a.apk"
+          mv kotlin-tv/app/build/outputs/apk/tv/debug/app-tv-debug.apk "$tv_apk"
+          mv kotlin-tv/app/build/outputs/apk/phone/debug/app-phone-debug.apk "$phone_apk"
+          tv_size=$(stat -c%s "$tv_apk"); tv_sha=$(sha256sum "$tv_apk" | awk '{print $1}')
+          ph_size=$(stat -c%s "$phone_apk"); ph_sha=$(sha256sum "$phone_apk" | awk '{print $1}')
+          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":26,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影TV %s"}\n' \
+            "$HONGGUOTV_VERSION_CODE" "$version" "$VERSION" "$tv_apk" "$tv_size" "$tv_sha" "$version" > update.json
+          printf '{"schema":1,"packageName":"com.hongguotv.phone","versionCode":%s,"versionName":"%s","minSdk":26,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影 %s"}\n' \
+            "$HONGGUOTV_VERSION_CODE" "$version" "$VERSION" "$phone_apk" "$ph_size" "$ph_sha" "$version" > update-phone.json
+          sha256sum "$tv_apk" "$phone_apk" update.json update-phone.json > SHA256SUMS
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/kotlin-v')
         env:
@@ -69,9 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           version="${VERSION#kotlin-v}"
-          gh release create "$TAG" "hongguotv-kotlin-${version}-android8.apk" update.json SHA256SUMS \
+          gh release create "$TAG" "橘影tv-${version}-v7a.apk" "橘影-${version}-v8a.apk" update.json update-phone.json SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Kotlin TV ${version}" \
+            --title "橘影 ${version}" \
             --generate-notes
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -79,5 +83,7 @@ jobs:
           name: kotlin-native-verification
           path: |
             kotlin-tv/core/build/reports/tests/test/
-            kotlin-tv/app/build/reports/lint-results-debug.*
-            kotlin-tv/app/build/outputs/apk/debug/*.apk
+            kotlin-tv/app/build/reports/lint-results-tvDebug.*
+            kotlin-tv/app/build/reports/lint-results-phoneDebug.*
+            kotlin-tv/app/build/outputs/apk/tv/debug/*.apk
+            kotlin-tv/app/build/outputs/apk/phone/debug/*.apk

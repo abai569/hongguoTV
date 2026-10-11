@@ -28,16 +28,16 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
         const val RELEASES = "https://github.com/$REPOSITORY/releases"
         val DOWNLOAD_PROXIES = listOf("https://ghfast.top/", "https://git-proxy.abai.eu.org/", "https://gh-proxy.com/")
         const val MAX_APK_BYTES = 80L * 1024 * 1024
-        fun parse(json: String): AppUpdate {
+        fun parse(json: String, expectedPackage: String): AppUpdate {
             val o = JSONObject(json)
-            require(o.getInt("schema") == 1 && o.getString("packageName") == "com.hongguotv.nativeapp") { "更新信息不匹配" }
+            require(o.getInt("schema") == 1 && o.getString("packageName") == expectedPackage) { "更新信息不匹配" }
             val apk = o.getJSONObject("apk")
             val update = AppUpdate(o.getLong("versionCode"), o.getString("versionName"), o.getInt("minSdk"),
                 o.getString("tag"), apk.getString("name"), apk.getLong("size"), apk.getString("sha256").lowercase(), o.optString("notes").take(1500))
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 26..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex("kotlin-v[0-9][0-9A-Za-z.+-]{0,80}")))
-            require(update.fileName.matches(Regex("(短剧TV|hongguotv-kotlin|hongguotv)-[0-9][0-9A-Za-z.+-]{0,80}(-android8)?\\.apk")))
+            require(update.fileName.matches(Regex("(橘影tv|橘影|短剧TV|hongguotv-kotlin|hongguotv)-[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
         }
@@ -90,13 +90,13 @@ class AppUpdateRepository : java.io.Closeable {
         }.build()
     private fun request(url: String) = Request.Builder().url(url).header("User-Agent", "HongguoTV-Updater")
         .header("Cache-Control", "no-cache").build()
-    fun latest(): AppUpdate {
+    fun latest(updateFile: String, expectedPackage: String): AppUpdate {
         for (base in AppUpdate.DOWNLOAD_PROXIES.map { it + AppUpdate.RELEASES } + AppUpdate.RELEASES) {
-            try { return fetch("$base/latest/download/update.json") } catch (_: Exception) {}
+            try { return fetch("$base/latest/download/$updateFile", expectedPackage) } catch (_: Exception) {}
         }
         throw IOException("无法连接更新服务器，请检查网络后重试")
     }
-    private fun fetch(url: String): AppUpdate {
+    private fun fetch(url: String, expectedPackage: String): AppUpdate {
         val call = http.newCall(request(url))
         call.timeout().timeout(25, TimeUnit.SECONDS)
         return call.execute().use { response ->
@@ -106,7 +106,7 @@ class AppUpdateRepository : java.io.Closeable {
                 while (true) { val n = input.read(buffer); if (n < 0) break; if (out.size() + n > 65536) throw IOException("更新信息过大"); out.write(buffer, 0, n) }
                 out.toByteArray()
             } ?: throw IOException("更新信息为空")
-            try { AppUpdate.parse(bytes.toString(Charsets.UTF_8)) } catch (_: Exception) { throw IOException("更新信息格式不正确") }
+            try { AppUpdate.parse(bytes.toString(Charsets.UTF_8), expectedPackage) } catch (_: Exception) { throw IOException("更新信息格式不正确") }
         }
     }
     fun download(update: AppUpdate, file: File, progress: (Int) -> Unit) {
