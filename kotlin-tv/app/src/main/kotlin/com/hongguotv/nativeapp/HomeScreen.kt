@@ -127,11 +127,14 @@ class HomeScreen(
                 if(BuildConfig.CHANNEL=="phone") {
                     val holder=FrameLayout(context)
                     holder.addView(horizontal,FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.WRAP_CONTENT))
-                    val arrowBg=TvStyle.shape(context,android.graphics.Color.argb(150,11,15,21),android.graphics.Color.TRANSPARENT,10)
-                    fun arrow(symbol: String)=label(symbol,22f,accent).apply { gravity=Gravity.CENTER; background=arrowBg; setPadding(dp(3),dp(3),dp(3),dp(3)); isClickable=false; isFocusable=false; visibility=View.GONE; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
-                    val leftArrow=arrow("‹"); val rightArrow=arrow("›")
-                    holder.addView(leftArrow,FrameLayout.LayoutParams(dp(26),FrameLayout.LayoutParams.MATCH_PARENT).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL })
-                    holder.addView(rightArrow,FrameLayout.LayoutParams(dp(26),FrameLayout.LayoutParams.MATCH_PARENT).apply { gravity=Gravity.END or Gravity.CENTER_VERTICAL })
+                    fun arrow(res: Int)=ImageView(context).apply {
+                        setImageResource(res); scaleType=ImageView.ScaleType.FIT_CENTER
+                        isClickable=false; isFocusable=false; visibility=View.GONE
+                        importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }
+                    val leftArrow=arrow(R.drawable.ic_chevron_left); val rightArrow=arrow(R.drawable.ic_chevron_right)
+                    holder.addView(leftArrow,FrameLayout.LayoutParams(dp(24),dp(30)).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL })
+                    holder.addView(rightArrow,FrameLayout.LayoutParams(dp(24),dp(30)).apply { gravity=Gravity.END or Gravity.CENTER_VERTICAL })
                     fun syncArrows() {
                         val more=horizontal.canScrollHorizontally(1)
                         rightArrow.visibility=if(more) View.VISIBLE else View.GONE
