@@ -32,7 +32,6 @@ class SearchSessionExpiredException: IOException("搜索结果已过期，请从
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
-    private val suggestionWebId = System.currentTimeMillis().toString()
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
     private fun text(url: String, signed: Signer.Request? = null): String {
@@ -142,10 +141,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     fun searchSuggest(keyword: String): List<String> {
         val query=keyword.trim()
         if(query.isEmpty()) return emptyList()
-        val url="$site/incent_resource/suggestion?web_id=${Signer.encode(suggestionWebId)}&query=${Signer.encode(query)}&count=10"
+        val webId=Signer.encode(VendorConstants.device.getValue("device_id"))
+        val url="$site/incent_resource/suggestion?app_id=8662&web_id=$webId&query=${Signer.encode(query)}&count=10"
         val data=JSONObject(text(url))
-        if(data.optInt("status",-1)!=200) return emptyList()
-        val arr=data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
+        val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
         return arr.objects().mapNotNull { it.str("name").ifBlank { null } }.take(10)
     }
     private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))

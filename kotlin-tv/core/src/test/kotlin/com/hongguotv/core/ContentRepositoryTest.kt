@@ -254,7 +254,7 @@ class ContentRepositoryTest {
             queries += request.url.queryParameter("query") ?: ""
             when {
                 request.url.encodedPath.contains("incent_resource/suggestion") ->
-                    """{"status":200,"data":{"suggest_list":[{"name":"我合成了全世界"}]}}"""
+                    """{"suggest_list":[{"name":"我合成了全世界"}]}"""
                 request.url.queryParameter("query") == "WHCLQSJ" ->
                     """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false}]}"""
                 else -> """{"code":0,"search_tabs":[${searchTab(11,"321")}]}"""
@@ -269,8 +269,8 @@ class ContentRepositoryTest {
             assertEquals("/incent_resource/suggestion",request.url.encodedPath)
             assertEquals("whclqsj",request.url.queryParameter("query"))
             assertEquals("10",request.url.queryParameter("count"))
-            assertTrue(request.url.queryParameter("web_id")!!.matches(Regex("[0-9]+")))
-            """{"status":200,"data":{"suggest_list":[{"name":"我合成了全世界第1季"}]}}"""
+            assertEquals("8662",request.url.queryParameter("app_id"))
+            """{"suggest_list":[{"name":"我合成了全世界第1季","keyword":"7689289660794670105"}]}"""
         }
         assertEquals(listOf("我合成了全世界第1季"),repo.searchSuggest("whclqsj"))
     }
