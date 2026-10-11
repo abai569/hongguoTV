@@ -1131,6 +1131,28 @@ class MainActivity: Activity() {
         episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%epCols==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%epCols==epCols-1 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=epCols) v.nextFocusUpId=episodes[i-epCols].id; v.nextFocusDownId=if(i+epCols<episodes.size) episodes[i+epCols].id else v.id }
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*gs).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
     }
+    private fun slideEpisode(direction: Int) {
+        val data=detail ?: return
+        val next=episodeIndex+direction
+        if(next<0 || next>data.episodes.lastIndex) return
+        if(BuildConfig.CHANNEL!="phone" || screen!="player") { playEpisode(next); return }
+        val pv=playerView
+        val h=(root.height.takeIf { it>0 } ?: resources.displayMetrics.heightPixels).toFloat()
+        val shot=(pv?.videoSurfaceView as? android.view.TextureView)?.let { runCatching { it.bitmap }.getOrNull() }
+        playEpisode(next)
+        playerPlaceholder?.let { it.translationY=0f; it.visibility=View.VISIBLE; loadCover(it,data.series.cover) }
+        if(shot!=null) {
+            val overlay=ImageView(this).apply { setImageBitmap(shot); scaleType=ImageView.ScaleType.FIT_XY }
+            root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
+            overlay.animate().translationY(if(direction>0) -h else h).setDuration(240)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .withEndAction { root.removeView(overlay) }.start()
+        }
+        pv?.let { view ->
+            view.translationY=if(direction>0) h else -h
+            view.animate().translationY(0f).setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
+    }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false) {
         updater.interrupt()
         val data=detail ?: return
@@ -1162,8 +1184,9 @@ class MainActivity: Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if(!reuse) {
             root.removeAllViews(); root.setBackgroundColor(Color.BLACK)
-            val view=PlayerView(this).apply {
-                useController=false; resizeMode=frameResizeMode(); isFocusable=false
+            val view=layoutInflater.inflate(R.layout.player_view,root,false) as PlayerView
+            view.apply {
+                resizeMode=frameResizeMode(); isFocusable=false
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) {
                     var startX=0f; var startY=0f; var startPos=0L; var dragging=false; var vertical=false
@@ -1191,8 +1214,8 @@ class MainActivity: Activity() {
                                 if(vertical) {
                                     val last=(detail?.episodes?.lastIndex ?: 0)
                                     when {
-                                        dy<=-dp(56) -> if(episodeIndex<last) playEpisode(episodeIndex+1) else Toast.makeText(this@MainActivity,"已经是最后一集",Toast.LENGTH_SHORT).show()
-                                        dy>=dp(56) -> if(episodeIndex>0) playEpisode(episodeIndex-1) else Toast.makeText(this@MainActivity,"已经是第一集",Toast.LENGTH_SHORT).show()
+                                        dy<=-dp(56) -> if(episodeIndex<last) slideEpisode(1) else Toast.makeText(this@MainActivity,"已经是最后一集",Toast.LENGTH_SHORT).show()
+                                        dy>=dp(56) -> if(episodeIndex>0) slideEpisode(-1) else Toast.makeText(this@MainActivity,"已经是第一集",Toast.LENGTH_SHORT).show()
                                     }
                                 } else if(dragging) {
                                     val dur=player?.duration ?: 0L
