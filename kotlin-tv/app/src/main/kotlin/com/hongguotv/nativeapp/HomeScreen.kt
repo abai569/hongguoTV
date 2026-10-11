@@ -43,7 +43,7 @@ class HomeScreen(
     private val remember: (String)->Unit
 ): LinearLayout(context) {
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
-    data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null,val perRow: Int=6)
+    data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null,val perRow: Int=6,val cardWidth: Int=0)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
     private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
     private data class Line(val horizontal: HorizontalScrollView,val cards: List<Card>)
@@ -112,13 +112,13 @@ class HomeScreen(
             block.addView(heading)
             val lines=mutableListOf<Line>()
             val rowCards=mutableListOf<Card>()
-            val perRow=shelf.perRow
             val entries=shelf.entries
             val moreAction=shelf.more
             val totalCount=entries.size+if(moreAction!=null) 1 else 0
+            val perRow=if(shelf.cardWidth>0) totalCount.coerceAtLeast(1) else shelf.perRow
             val rowCount=(totalCount+perRow-1)/perRow
             val gaps=dp(14)*(perRow-1)+dp(4)
-            val width=((resources.displayMetrics.widthPixels*.9f-gaps)/perRow).toInt().coerceAtLeast(dp(100))
+            val width=if(shelf.cardWidth>0) shelf.cardWidth else ((resources.displayMetrics.widthPixels*.9f-gaps)/perRow).toInt().coerceAtLeast(dp(100))
             for(rowIndex in 0 until rowCount) {
                 val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
                 val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }

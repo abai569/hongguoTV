@@ -310,7 +310,8 @@ class MainActivity: Activity() {
     private fun base(title: String?=null): LinearLayout {
         root.removeAllViews(); root.setBackgroundColor(bg)
         val container=column(); val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
-        container.setPadding(horizontal,vertical,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
+        val topPad=if(BuildConfig.CHANNEL=="phone") dp(12) else vertical
+        container.setPadding(horizontal,topPad,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
         return container
     }
     private fun loadCover(view: ImageView,url: String) {
@@ -441,7 +442,7 @@ class MainActivity: Activity() {
         val top=column()
         if(phone) {
             top.setPadding(0,0,0,dp(6))
-            val clockRow=row().apply { gravity=Gravity.END }
+            val clockRow=row()
             clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
             clockRow.addView(clockText)
             val stack=column().apply { gravity=Gravity.END }; stack.addView(clockRow); stack.addView(memberText)
@@ -792,7 +793,8 @@ class MainActivity: Activity() {
                 else item.badge.ifBlank { "查看剧集" }
             HomeScreen.Entry(item,label)
         }
-        if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },columns())
+        val cw=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.4f).toInt() else 0
+        if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },columns(),cw)
     }
     private fun homeShelves(): List<HomeScreen.Shelf> {
         val recent=library.history().filterNot { library.watched(it.series.id) }
@@ -1006,14 +1008,30 @@ class MainActivity: Activity() {
             synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
         }
         content.addView(hero)
-        val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
         val maxGroup=data.episodes.lastIndex/20; group=group.coerceIn(0,maxGroup)
-        val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
-        groupRow.addView(text("第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集",16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
-        addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
-        lateinit var jump: TextView
-        jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
-        content.addView(groupRow)
+        val groupLabel="第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集"
+        if(BuildConfig.CHANNEL=="phone") {
+            val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
+            val previous=button("‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
+            groupRow.addView(previous,lp(0,dp(46)).apply { weight=1f; rightMargin=dp(6) })
+            groupRow.addView(text(groupLabel,14f).apply { gravity=Gravity.CENTER },lp(0,dp(46)).apply { weight=1f })
+            val next=button("下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
+            groupRow.addView(next,lp(0,dp(46)).apply { weight=1f })
+            content.addView(groupRow)
+            val jumpRow=row()
+            lateinit var jump: TextView
+            jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
+            jumpRow.addView(jump,lp(-1,dp(46)))
+            content.addView(jumpRow)
+        } else {
+            val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
+            val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
+            groupRow.addView(text(groupLabel,16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
+            addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
+            lateinit var jump: TextView
+            jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
+            content.addView(groupRow)
+        }
         val episodes=mutableListOf<View>()
         val epCols=episodeColumns()
         (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(epCols).forEach { numbers ->
