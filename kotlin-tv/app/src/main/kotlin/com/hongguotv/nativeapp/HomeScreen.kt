@@ -109,6 +109,7 @@ class HomeScreen(
             heading.addView(label(shelf.title,16f).apply { setTypeface(null,Typeface.BOLD) },LayoutParams(0,-2,1f))
             if(shelf.key=="hot" && !refreshPlaced) { heading.addView(refresh,LayoutParams(-2,-2).apply { leftMargin=dp(8) }); refreshPlaced=true }
             else if(BuildConfig.CHANNEL=="tv") heading.addView(label("左右选剧  ·  上下切换分区",10f,TvStyle.muted))
+            val shelfHint=if(BuildConfig.CHANNEL=="phone" && shelf.cardWidth>0) label("左右滑动 ›",11f,TvStyle.muted).apply { setPadding(dp(8),0,0,0) }.also { heading.addView(it) } else null
             block.addView(heading)
             val lines=mutableListOf<Line>()
             val rowCards=mutableListOf<Card>()
@@ -122,7 +123,28 @@ class HomeScreen(
             for(rowIndex in 0 until rowCount) {
                 val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
                 val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
-                horizontal.addView(line); block.addView(horizontal)
+                horizontal.addView(line)
+                if(BuildConfig.CHANNEL=="phone") {
+                    val holder=FrameLayout(context)
+                    holder.addView(horizontal,FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.WRAP_CONTENT))
+                    val arrowBg=TvStyle.shape(context,android.graphics.Color.argb(150,11,15,21),android.graphics.Color.TRANSPARENT,10)
+                    fun arrow(symbol: String)=label(symbol,22f,accent).apply { gravity=Gravity.CENTER; background=arrowBg; setPadding(dp(3),dp(3),dp(3),dp(3)); isClickable=false; isFocusable=false; visibility=View.GONE; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+                    val leftArrow=arrow("‹"); val rightArrow=arrow("›")
+                    holder.addView(leftArrow,FrameLayout.LayoutParams(dp(26),FrameLayout.LayoutParams.MATCH_PARENT).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL })
+                    holder.addView(rightArrow,FrameLayout.LayoutParams(dp(26),FrameLayout.LayoutParams.MATCH_PARENT).apply { gravity=Gravity.END or Gravity.CENTER_VERTICAL })
+                    fun syncArrows() {
+                        val more=horizontal.canScrollHorizontally(1)
+                        rightArrow.visibility=if(more) View.VISIBLE else View.GONE
+                        leftArrow.visibility=if(horizontal.canScrollHorizontally(-1)) View.VISIBLE else View.GONE
+                        shelfHint?.visibility=if(more) View.VISIBLE else View.GONE
+                    }
+                    horizontal.setOnScrollChangeListener { _,_,_,_,_ -> syncArrows() }
+                    horizontal.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> syncArrows() }
+                    horizontal.post { horizontal.post { syncArrows() } }
+                    block.addView(holder)
+                } else {
+                    block.addView(horizontal)
+                }
                 val lineCards=mutableListOf<Card>()
                 for(columnIndex in 0 until perRow) {
                     val index=rowIndex*perRow+columnIndex
