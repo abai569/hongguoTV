@@ -1522,7 +1522,7 @@ class MainActivity: Activity() {
 }
 private class DanmakuView(context: android.content.Context): android.view.View(context) {
     init { setWillNotDraw(false) }
-    data class Dm(val time: Long, val text: String, var x: Float, val y: Float, val speed: Float)
+    data class Dm(val time: Long, val text: String, var x: Float=0f, var y: Float=0f, var width: Float=0f, var lane: Int=0, var speed: Float=0f)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
     private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=42f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
@@ -1540,7 +1540,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",expand.optLong("video_offset",expand.optLong("play_offset",expand.optLong("start_time",0L)))))
-            pending.add(Dm(timeMs,processed,0f,0f,0f))
+            pending.add(Dm(timeMs,processed))
         }
         pending.sortBy { it.time }
         invalidate()
@@ -1557,7 +1557,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",0L))
-            pending.add(Dm(timeMs,processed,0f,0f,0f))
+            pending.add(Dm(timeMs,processed))
         }
         pending.sortBy { it.time }
         invalidate()
@@ -1573,34 +1573,39 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     override fun onDraw(canvas: android.graphics.Canvas) {
         super.onDraw(canvas)
         val w=width.toFloat(); val h=height.toFloat()
-        // Spawn danmaku whose time has come
+        if(w<=0f || h<=0f) return
+        val fm=paint.fontMetrics
+        val lineHeight=(fm.descent-fm.ascent)*1.2f
+        val top=h*0.04f
+        val laneCount=Math.max(1,Math.min(10,((h*BAND)/lineHeight).toInt()))
+        // One speed for every danmaku on this screen, so a later one can never overtake an earlier one.
+        val speed=w/TRAVEL_FRAMES
+        fun baseline(lane: Int)=top-fm.ascent+lane*lineHeight
         if(pending.isNotEmpty()) {
             val currentPos=currentPosProvider?.invoke() ?: 0L
             while(pending.isNotEmpty() && pending[0].time<=currentPos) {
                 val dm=pending.removeAt(0)
                 val textW=paint.measureText(dm.text)
-                var chosenLane=0
-                for(lane in 0 until 5) {
-                    val laneY=h*0.05f+lane*(h*0.06f)
-                    var occupied=false
-                    for(a in active) {
-                        if(Math.abs(a.y-laneY)<h*0.03f && a.x+textW>w*0.5f) { occupied=true; break }
-                    }
-                    if(!occupied) { chosenLane=lane; break }
+                // A lane is free only after its newest danmaku has fully entered the screen.
+                var chosen=-1
+                for(lane in 0 until laneCount) {
+                    val occupied=active.any { it.lane==lane && it.x+it.width>=w }
+                    if(!occupied) { chosen=lane; break }
                 }
-                active.add(dm.copy(x=w, y=h*0.05f+chosenLane*(h*0.06f), speed=8f+(Math.random()*4).toFloat()))
+                if(chosen<0) continue
+                dm.x=w; dm.y=baseline(chosen); dm.width=textW; dm.lane=chosen; dm.speed=speed
+                active.add(dm)
             }
             lastPos=currentPos
         }
-        // Update and draw
         val it=active.iterator()
         while(it.hasNext()) {
             val dm=it.next()
             dm.x-=dm.speed
-            if(dm.x+paint.measureText(dm.text)<0) { it.remove(); continue }
+            if(dm.x+dm.width<0) { it.remove(); continue }
             canvas.drawText(dm.text,dm.x,dm.y,paint)
         }
     }
-    private fun randomY(h: Float): Float { val lanes=5; val lane=(0 until lanes).random(); return h*0.05f+lane*(h*0.06f) }
+    private companion object { const val BAND=0.30f; const val TRAVEL_FRAMES=260f }
     var currentPosProvider: (()->Long)?=null
 }
