@@ -369,7 +369,7 @@ class MainActivity: Activity() {
         leaveCollection()
         tabState[tab]=CatalogState(page,catalog,hasMore,ranking); tabFocus[tab]=catalogFocus
         tab=next; val saved=tabState[next]; page=saved?.page ?: 1; catalog=saved?.items ?: emptyList(); hasMore=saved?.hasMore ?: false; ranking=saved?.ranking; catalogFocus=tabFocus[next].orEmpty()
-        showCatalog(load=(next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank())),focusNav=true)
+        showCatalog(load=when(next) { 0, 2 -> homeRank.isEmpty(); else -> next<=2 && catalog.isEmpty() && (next!=1 || query.isNotBlank()) },focusNav=true)
     }
     private fun switchContentType(type: ContentType) {
         if(library.contentType==type) return
