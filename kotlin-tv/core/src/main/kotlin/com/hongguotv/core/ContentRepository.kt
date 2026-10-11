@@ -59,11 +59,25 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     private fun valid(rows: List<Series>) = rows.filter { it.id.matches(Regex("[0-9]{1,30}")) && it.title.isNotBlank() }.distinctBy { it.id }
     fun ranking(type: RankType, page: Int = 1): CatalogPage {
         require(page in 1..100)
-        return ComicRank.parse(text("$site/rank/${type.slug}?page=$page"),page,type)
+        // The website rank page alternates between an inline payload and a lazy placeholder with no
+        // list; retry a few times so a cache-miss response does not blank the board or the home sections.
+        var last: Exception? = null
+        for(attempt in 1..3) {
+            try { return ComicRank.parse(text("$site/rank/${type.slug}?page=$page"),page,type) }
+            catch(e: Exception) { last=e; if(attempt<3) runCatching { Thread.sleep(200L*attempt) } }
+        }
+        throw (last as? IOException) ?: IOException("${type.label}榜单暂不可用")
     }
     fun comicRanking(page: Int = 1): CatalogPage = ranking(RankType.COMIC,page)
     /** First ranking page for each home "hot" section, in website order. */
-    fun homeCategories(): List<Pair<RankType,CatalogPage>> = RankType.entries.map { it to ranking(it,1) }
+    fun homeCategories(): List<Pair<RankType,CatalogPage>> {
+        var last: Exception? = null
+        val sections=RankType.entries.mapNotNull { type ->
+            try { type to ranking(type,1) } catch(e: Exception) { last=e; null }
+        }
+        if(sections.isEmpty()) throw (last as? IOException) ?: IOException("首页热播暂不可用")
+        return sections
+    }
     fun home(page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage {
         require(page in 1..100)
         if(type==ContentType.COMIC) return comicRanking(page)

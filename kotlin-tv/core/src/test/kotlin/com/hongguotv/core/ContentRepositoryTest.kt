@@ -96,6 +96,30 @@ class ContentRepositoryTest {
         assertTrue(sections.all { it.second.items.isNotEmpty() })
     }
 
+    @Test fun rankingRetriesWhenRankPageReturnsLazyPlaceholder() {
+        var calls=0
+        val lazy="""<script>_ROUTER_DATA={"loaderData":{"rank_hot-drama/page":{"rankKey":"hongguo","pageNum":1}}};</script>"""
+        val repo=repository {
+            calls++
+            if(calls==1) lazy else lazy+currentRank("rank_hot-drama/page",rankPayload(1,1))
+        }
+        assertEquals("测试漫剧",repo.ranking(RankType.SHORT,1).items.single().title)
+        assertEquals(2,calls)
+    }
+
+    @Test fun homeCategoriesSkipsOneFailingSectionInsteadOfBlankHome() {
+        val lazy="""<script>_ROUTER_DATA={"loaderData":{"rank_hot-comic-drama/page":{"rankKey":"comic","pageNum":1}}};</script>"""
+        val repo=repository { request ->
+            when {
+                request.url.encodedPath.contains("hot-real-drama") -> currentRank("rank_hot-real-drama/page",rankPayload(1,1))
+                request.url.encodedPath.contains("hot-drama") -> currentRank("rank_hot-drama/page",rankPayload(1,1))
+                else -> lazy
+            }
+        }
+        val sections=repo.homeCategories()
+        assertEquals(listOf(RankType.SHORT,RankType.REAL),sections.map { it.first })
+    }
+
     @Test fun comicRankingPreservesSourceRankHeatAndUpdateRatherThanRenumbering() {
         val payload=rankPayload(2,5)
         payload.getJSONArray("rankList").getJSONObject(0).put("rank",23).put("heatText","5746万热度")
