@@ -224,7 +224,7 @@ class MainActivity: Activity() {
     private fun dp(value: Number)=(value.toFloat()*resources.displayMetrics.density).toInt()
     private fun widthDp()=resources.displayMetrics.widthPixels/resources.displayMetrics.density
     private fun columns()=if(BuildConfig.CHANNEL=="phone") 3 else 6
-    private fun homeCardWidth()=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.4f).toInt() else 0
+    private fun homeCardWidth()=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.3f).toInt() else 0
     private fun episodeGroupSize()=if(BuildConfig.CHANNEL=="phone") 40 else 20
     private fun episodeColumns()=if(BuildConfig.CHANNEL=="phone") 5 else 10
     private fun applyOrientation(playing: Boolean) {
@@ -254,11 +254,12 @@ class MainActivity: Activity() {
     }
     private fun addChips(parent: LinearLayout,pills: List<Pair<String,()->Unit>>): FlowLayout {
         val context=this
+        val small=BuildConfig.CHANNEL=="phone"
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
-                setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
+                text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
+                setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 16),dp(if(small) 8 else 12),dp(if(small) 12 else 16),dp(if(small) 8 else 12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.focusBackground(context)
                 setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(this,focused) }
@@ -478,6 +479,7 @@ class MainActivity: Activity() {
             typeButtons[ContentType.COMIC]=nav[0]
             nav.forEach { it.nextFocusDownId=typeButtons.getValue(library.contentType).id }
         }
+        var searchPanelShown=false
         if(tab==1 && query.isNotBlank()) {
             val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
             head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
@@ -486,27 +488,23 @@ class MainActivity: Activity() {
         } else if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
             if(hotKeywords.isEmpty()) hotKeywords=RankType.entries.flatMap { type -> library.cachedRank(type)?.items.orEmpty() }.map { it.title }.filter { it.isNotBlank() }.distinct().take(15)
-            val area=row()
-            val left=column()
             val keywordRow=row().apply { setPadding(dp(2),0,0,dp(10)) }
-            // keywordRow.addView(text("关键词：",20f,muted))
             val input=EditText(this).apply {
                 id=View.generateViewId(); hint="请输入剧名或关键词"; setText(searchDraft); setSelection(text.length)
                 textSize=20f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1
                 filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
                 setPadding(dp(12),dp(8),dp(12),dp(8)); background=rounded(TvStyle.surface,TvStyle.outline)
             }
-            keywordRow.addView(input,lp(0,dp(46)).apply { weight=1f })
-            left.addView(keywordRow); searchKeyword=input
+            keywordRow.addView(input,lp(0,dp(if(phone) 48 else 46)).apply { weight=1f })
+            searchKeyword=input
             var syncingText=false
-            lateinit var keyboard: SearchKeyboard
-            keyboard=SearchKeyboard(this,onChange={ value ->
+            var keyboard: SearchKeyboard?=null
+            if(!phone) keyboard=SearchKeyboard(this,onChange={ value ->
                 searchDraft=value
                 if(input.text.toString()!=value) { syncingText=true; input.setText(value); input.setSelection(value.length); syncingText=false }
                 scheduleSuggest(value)
-            },onSearch={ input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard.setText(value) },{ searchDraft=""; keyboard.setText("") }) })
+            },onSearch={ input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch) },onPush={ tvTools.phoneInput(null,{ value -> searchDraft=value; keyboard?.setText(value) },{ searchDraft=""; keyboard?.setText("") }) })
             searchKeyboard=keyboard; searchButton=null
-            if(isTvDevice) left.addView(keyboard) else left.addView(keyboard)
             input.addTextChangedListener(object: android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) {}
                 override fun onTextChanged(s: CharSequence?,start: Int,before: Int,count: Int) {}
@@ -514,29 +512,39 @@ class MainActivity: Activity() {
                     if(syncingText) return
                     val value=(s?.toString() ?: "").take(80)
                     searchDraft=value
-                    if(keyboard.value()!=value) keyboard.setText(value)
+                    if(keyboard?.value()!=value) keyboard?.setText(value)
                     scheduleSuggest(value)
                 }
             })
             input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
-            area.addView(left,lp(0,-1).apply { weight=0.8f; rightMargin=dp(24) })
-            val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
-            val right=column(); rightScroll.addView(right)
             val history=library.searches()
-            historyTitle=text("历史",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
-            right.addView(historyTitle)
-            historyFlow=if(history.isEmpty()) { right.addView(text("暂无搜索历史",13f,muted)); null } else addChips(right,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard.setText(it.query); runSearch(it.query,it.type) } })
-            recommendTitle=text("热门推荐",22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
-            right.addView(recommendTitle)
-            val host=column(); recommendHost=host; right.addView(host)
+            historyTitle=text("历史",if(phone) 17f else 22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
+            recommendTitle=text("热门推荐",if(phone) 17f else 22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
+            val host=column(); recommendHost=host
+            val panel=column()
+            panel.addView(historyTitle)
+            historyFlow=if(history.isEmpty()) { panel.addView(text("暂无搜索历史",13f,muted)); null } else addChips(panel,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard?.setText(it.query); runSearch(it.query,it.type) } })
+            panel.addView(recommendTitle)
+            panel.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")
-            area.addView(rightScroll,lp(0,-1).apply { weight=1f })
-            container.addView(area)
-            keyboard.setText(searchDraft)
-            val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
-            keyboard.linkRight(rightTarget)
-            input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard.firstKeyId
-            nav.forEach { it.nextFocusDownId=input.id }
+            if(phone) {
+                val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
+                val body2=column(); scroll.addView(body2); container.addView(scroll,lp(-1,0).apply { weight=1f })
+                body2.addView(keywordRow,lp(-1,-2))
+                body2.addView(panel,lp(-1,-2))
+                searchPanelShown=true
+            } else {
+                val left=column(); left.addView(keywordRow); keyboard?.let { left.addView(it) }
+                val area=row(); area.addView(left,lp(0,-1).apply { weight=0.8f; rightMargin=dp(24) })
+                val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
+                rightScroll.addView(panel); area.addView(rightScroll,lp(0,-1).apply { weight=1f })
+                container.addView(area)
+                keyboard?.setText(searchDraft)
+                val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
+                keyboard?.linkRight(rightTarget)
+                input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
+                nav.forEach { it.nextFocusDownId=input.id }
+            }
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text("热播榜",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
@@ -565,7 +573,7 @@ class MainActivity: Activity() {
                 favoriteStatus=text(favoriteMonitor.status,13f,muted).apply { setPadding(0,0,0,dp(6)) }; container.addView(favoriteStatus)
             }
         }
-        val body=column(); catalogBody=body; container.addView(body,lp(-1,0).apply { weight=1f })
+        val body=column(); catalogBody=body; if(!searchPanelShown) container.addView(body,lp(-1,0).apply { weight=1f })
         if(localCatalog()) {
             catalog=localItems(); ranking=null; page=page.coerceIn(1,maxOf(1,(catalog.size+pageSize-1)/pageSize)); hasMore=page*pageSize<catalog.size
         }
