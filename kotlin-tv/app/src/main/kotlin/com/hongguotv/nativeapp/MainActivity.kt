@@ -225,11 +225,15 @@ class MainActivity: Activity() {
     private fun widthDp()=resources.displayMetrics.widthPixels/resources.displayMetrics.density
     private fun columns()=if(BuildConfig.CHANNEL=="phone") 3 else 6
     private fun homeCardWidth()=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.3f).toInt() else 0
-    private fun episodeGroupSize()=if(BuildConfig.CHANNEL=="phone") 40 else 20
+    private fun episodeGroupSize()=40
     private fun episodeColumns()=if(BuildConfig.CHANNEL=="phone") 5 else 10
     private fun applyOrientation(playing: Boolean) {
         if(BuildConfig.CHANNEL!="phone") return
         requestedOrientation=if(playing) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
+    private fun applyVideoOrientation(portrait: Boolean) {
+        if(BuildConfig.CHANNEL!="phone") { requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE; return }
+        requestedOrientation=if(portrait) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
     private fun lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
     private fun rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
@@ -985,48 +989,68 @@ class MainActivity: Activity() {
             if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else { prefetchEpisode(target.index); showDetail(false) }
         }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay) } })
     }
+    private fun showSynopsis(title: String,body: String) {
+        val view=TextView(this).apply { setText(body); textSize=15f; setTextColor(TvStyle.text); setPadding(dp(4),dp(4),dp(4),dp(4)) }
+        val scroll=ScrollView(this).apply { addView(view) }
+        AlertDialog.Builder(this).setTitle("$title · 简介").setView(scroll).setPositiveButton("关闭",null).show()
+    }
     private fun showDetail(focusEpisode: Boolean) {
         invalidatePage(); releaseCatalogViews(); screen="detail"; val data=detail ?: return showCatalog(); applyOrientation(false)
         val body=base("剧集详情")
         val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false }; val content=column(); scroll.addView(content); body.addView(scroll,lp(-1,0).apply { weight=1f })
         val phone=BuildConfig.CHANNEL=="phone"
-        val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(12))
-        val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER }; hero.addView(image,lp(if(phone) dp(96) else dp(123),if(phone) dp(136) else dp(174)).apply { rightMargin=if(phone) dp(14) else dp(24) }); loadCover(image,data.series.cover)
-        val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
-        info.addView(text(data.series.title,if(phone) 22f else 26f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END })
-        info.addView(text("${data.episodes.size} 集  ·  ${data.series.tags}",13f,muted).apply { maxLines=1; setPadding(0,dp(8),0,dp(8)) })
-        val description=data.series.description.ifBlank { "选择剧集开始观看" }
-        val synopsis=text(description,15f,muted).apply { maxLines=if(synopsisExpanded) 20 else 2; ellipsize=TextUtils.TruncateAt.END }
-        info.addView(synopsis)
-        val actions=row(); actions.setPadding(0,dp(12),0,0)
         val progress=library.progress(data.series.id)
         val resumeIndex=progress?.let { data.episodes.indexOf(it.episodeId).takeIf { n -> n>=0 } } ?: 0
         val resumePosition=progress?.takeIf { !it.completed && resumeIndex==it.episodeIndex }?.position ?: 0
         val watched=library.watched(data.series.id)
-        val play=addButton(actions,if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeIndex+1} 集" else "开始观看") { playEpisode(if(watched) 0 else if(progress?.completed==true) (resumeIndex+1).coerceAtMost(data.episodes.lastIndex) else resumeIndex,if(watched) 0 else resumePosition) }
+        val description=data.series.description.ifBlank { "选择剧集开始观看" }
+        val cover=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER }; loadCover(cover,data.series.cover)
         lateinit var favorite: TextView
-        favorite=addButton(actions,if(library.favorite(data.series.id)) "已收藏" else "收藏") {
+        lateinit var play: TextView
+        val playLabel=if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeIndex+1} 集" else "开始观看"
+        val playAction: ()->Unit = { playEpisode(if(watched) 0 else if(progress?.completed==true) (resumeIndex+1).coerceAtMost(data.episodes.lastIndex) else resumeIndex,if(watched) 0 else resumePosition) }
+        val favoriteLabel=if(library.favorite(data.series.id)) "已收藏" else "收藏"
+        val favoriteAction: ()->Unit = {
             favoriteMonitor.stop()
             val saved=library.toggle(data.series)
             if(saved) library.observeFavorite(data.series.id,data.episodes.size,System.currentTimeMillis(),acknowledge=true)
             favorite.text=if(saved) "已收藏" else "收藏"
         }
-        lateinit var synopsisButton: TextView
-        val synopsisToggle: ()->Unit = {
-            synopsisExpanded=!synopsisExpanded
-            synopsis.maxLines=if(synopsisExpanded) 20 else 2
-            synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
-            synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
-        }
-        val synopsisLabel=if(synopsisExpanded) "收起简介" else "完整简介"
+        val title=text(data.series.title,if(phone) 22f else 26f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END }
+        val meta=text("${data.episodes.size} 集  ·  ${data.series.tags}",13f,muted).apply { maxLines=1; setPadding(0,dp(8),0,dp(8)) }
+        val synopsis=text(description,15f,muted).apply { maxLines=if(!phone && synopsisExpanded) 20 else 2; ellipsize=TextUtils.TruncateAt.END }
         if(phone) {
-            val synRow=row(); synRow.setPadding(0,dp(8),0,0); info.addView(synRow)
-            synopsisButton=addButton(synRow,synopsisLabel,onClick=synopsisToggle)
+            val coverRow=row().apply { setPadding(0,dp(12),0,dp(4)) }
+            coverRow.addView(cover,lp(dp(96),dp(136))); coverRow.addView(Space(this),lp(0,1).apply { weight=1f })
+            content.addView(coverRow)
+            content.addView(title)
+            content.addView(meta)
+            content.addView(synopsis)
+            val actions=row().apply { setPadding(0,dp(12),0,0) }
+            play=button(playLabel,onClick=playAction); actions.addView(play,lp(0,-2).apply { weight=1.4f; rightMargin=dp(6) })
+            favorite=button(favoriteLabel,onClick=favoriteAction); actions.addView(favorite,lp(0,-2).apply { weight=1f; rightMargin=dp(6) })
+            actions.addView(button("完整简介") { showSynopsis(data.series.title,description) },lp(0,-2).apply { weight=1f })
+            content.addView(actions)
         } else {
-            synopsisButton=addButton(actions,synopsisLabel,onClick=synopsisToggle)
+            val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(12))
+            hero.addView(cover,lp(dp(123),dp(174)).apply { rightMargin=dp(24) })
+            val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
+            info.addView(title)
+            info.addView(meta)
+            info.addView(synopsis)
+            val actions=row(); actions.setPadding(0,dp(12),0,0); info.addView(actions)
+            play=button(playLabel,onClick=playAction); actions.addView(play,lp().apply { rightMargin=dp(8) })
+            favorite=button(favoriteLabel,onClick=favoriteAction); actions.addView(favorite,lp().apply { rightMargin=dp(8) })
+            lateinit var synopsisButton: TextView
+            synopsisButton=button(if(synopsisExpanded) "收起简介" else "完整简介") {
+                synopsisExpanded=!synopsisExpanded
+                synopsis.maxLines=if(synopsisExpanded) 20 else 2
+                synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
+                synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
+            }
+            actions.addView(synopsisButton,lp().apply { rightMargin=dp(8) })
+            content.addView(hero)
         }
-        info.addView(actions)
-        content.addView(hero)
         val gs=episodeGroupSize()
         val maxGroup=data.episodes.lastIndex/gs; group=group.coerceIn(0,maxGroup)
         val groupLabel="第 ${group*gs+1}—${minOf((group+1)*gs,data.episodes.size)} 集"
@@ -1087,7 +1111,7 @@ class MainActivity: Activity() {
         if(!recovering) recovery.reset()
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         if(autoplay) sleepStopped=false
-        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/episodeGroupSize(); applyOrientation(true)
+        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/episodeGroupSize(); if(BuildConfig.CHANNEL=="phone") requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else applyOrientation(true)
         panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
         player?.playWhenReady=requestedAutoplay
         prefetchAttempts=0; prefetchAttemptAt=0
@@ -1241,6 +1265,10 @@ class MainActivity: Activity() {
                 override fun onIsPlayingChanged(playing: Boolean) { if(active()) { if(hud.visibility==View.VISIBLE) showHud(); syncMediaSession() } }
                 override fun onPlaybackParametersChanged(parameters: PlaybackParameters) { if(active()) syncMediaSession() }
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) syncMediaSession() }
+                override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                    if(!active() || videoSize.width<=0 || videoSize.height<=0) return
+                    applyVideoOrientation(videoSize.height>videoSize.width)
+                }
                 override fun onPlayerError(error: PlaybackException) { if(active()) playerFailure(error) }
             }
             playerListener=listener; p.addListener(listener)
