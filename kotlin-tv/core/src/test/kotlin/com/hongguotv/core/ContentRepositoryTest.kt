@@ -59,9 +59,42 @@ class ContentRepositoryTest {
     private fun script(name: String, args: JSONArray) =
         "<script data-fn-name=\"$name\" data-fn-args=\"${args.toString().replace("&","&amp;").replace("\"","&quot;")}\"></script>"
 
-    private fun currentRank(payload: JSONObject) = script("mergeLoaderData",JSONArray()
-        .put("rank_hot-comic-drama/page").put(JSONArray().put(JSONObject().put("key","content")
+    private fun currentRank(payload: JSONObject) = currentRank("rank_hot-comic-drama/page",payload)
+
+    private fun currentRank(route: String,payload: JSONObject) = script("mergeLoaderData",JSONArray()
+        .put(route).put(JSONArray().put(JSONObject().put("key","content")
             .put("routerDataFnName","p").put("routerDataFnArgs",JSONArray().put(payload.toString())))))
+
+    @Test fun rankingReadsEachHotSectionFromItsOwnRankPage() {
+        val paths=mutableListOf<String>()
+        val repo=repository { request ->
+            paths+=request.url.encodedPath
+            val route=when {
+                request.url.encodedPath.contains("hot-real-drama") -> "rank_hot-real-drama/page"
+                request.url.encodedPath.contains("hot-drama") -> "rank_hot-drama/page"
+                else -> "rank_hot-comic-drama/page"
+            }
+            """<script>_ROUTER_DATA={"loaderData":{"$route":{"rankKey":"$route","pageNum":1}}};</script>"""+currentRank(route,rankPayload(1,1))
+        }
+        assertEquals("测试漫剧",repo.ranking(RankType.SHORT,1).items.single().title)
+        assertEquals("测试漫剧",repo.ranking(RankType.COMIC,1).items.single().title)
+        assertEquals("测试漫剧",repo.ranking(RankType.REAL,1).items.single().title)
+        assertEquals(listOf("/rank/hot-drama","/rank/hot-comic-drama","/rank/hot-real-drama"),paths)
+    }
+
+    @Test fun homeCategoriesReturnThreeSectionsInWebsiteOrder() {
+        val repo=repository { request ->
+            val route=when {
+                request.url.encodedPath.contains("hot-real-drama") -> "rank_hot-real-drama/page"
+                request.url.encodedPath.contains("hot-drama") -> "rank_hot-drama/page"
+                else -> "rank_hot-comic-drama/page"
+            }
+            currentRank(route,rankPayload(1,2))
+        }
+        val sections=repo.homeCategories()
+        assertEquals(listOf(RankType.SHORT,RankType.COMIC,RankType.REAL),sections.map { it.first })
+        assertTrue(sections.all { it.second.items.isNotEmpty() })
+    }
 
     @Test fun comicRankingPreservesSourceRankHeatAndUpdateRatherThanRenumbering() {
         val payload=rankPayload(2,5)

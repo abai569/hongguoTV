@@ -31,8 +31,11 @@ class Library(context: Context) {
     private var index: LibraryIndex? = null
     private val homes = mutableMapOf<ContentType, CatalogPage>()
     private val homeSavedAt = mutableMapOf<ContentType, Long>()
+    private val rankHomes = mutableMapOf<RankType, CatalogPage>()
+    private val rankSavedAt = mutableMapOf<RankType, Long>()
     private var loading = false
     private var closed = false
+    private data class Loaded(val index: LibraryIndex, val homes: Map<ContentType, CatalogPage>, val stamps: Map<ContentType, Long>, val ranks: Map<RankType, CatalogPage>, val rankStamps: Map<RankType, Long>)
     private val readyCallbacks = mutableListOf<() -> Unit>()
     private val errorCallbacks = mutableListOf<(Throwable) -> Unit>()
     val isLoaded get() = index != null
@@ -55,6 +58,8 @@ class Library(context: Context) {
                 val now = System.currentTimeMillis()
                 val cached = mutableMapOf<ContentType, CatalogPage>()
                 val stamps = mutableMapOf<ContentType, Long>()
+                val rankCached = mutableMapOf<RankType, CatalogPage>()
+                val rankStamps = mutableMapOf<RankType, Long>()
                 val migration = homePrefs.edit()
                 val oldKeys = mutableListOf<String>()
                 ContentType.entries.forEach { type ->
@@ -68,19 +73,29 @@ class Library(context: Context) {
                     }
                     if (legacy != null) oldKeys += key
                 }
+                RankType.entries.forEach { type ->
+                    val key = "rank-${type.name}"
+                    val raw = homePrefs.getString(key, null).orEmpty()
+                    CatalogSnapshot.decode(raw, now)?.let { page ->
+                        rankCached[type] = page
+                        rankStamps[type] = org.json.JSONObject(raw).getLong("savedAt")
+                    }
+                }
                 // Only remove legacy cache after the separate cache has been committed.
                 if (oldKeys.isNotEmpty() && migration.commit()) {
                     prefs.edit().also { edit -> oldKeys.forEach(edit::remove) }.commit()
                 }
-                Triple(loaded, cached, stamps)
+                Loaded(loaded, cached, stamps, rankCached, rankStamps)
             }
             main.post {
                 loading = false
                 if (closed) { readyCallbacks.clear(); errorCallbacks.clear(); return@post }
                 val ready = readyCallbacks.toList(); readyCallbacks.clear()
                 val errors = errorCallbacks.toList(); errorCallbacks.clear()
-                result.onSuccess { (loaded, cached, stamps) ->
-                    index = loaded; homes.putAll(cached); homeSavedAt.putAll(stamps)
+                result.onSuccess { loaded ->
+                    index = loaded.index
+                    homes.putAll(loaded.homes); homeSavedAt.putAll(loaded.stamps)
+                    rankHomes.putAll(loaded.ranks); rankSavedAt.putAll(loaded.rankStamps)
                     ready.forEach { it() }
                 }.onFailure { failure -> errors.forEach { it(failure) } }
             }
@@ -146,6 +161,20 @@ class Library(context: Context) {
         homes[type] = CatalogPage(retained, hasMore)
         homeSavedAt[type] = now
         homeWrites.submit(mapOf("home-${type.storedValue}" to { CatalogSnapshot.encode(retained, hasMore, now) }))
+    }
+    fun cachedRank(type: RankType): CatalogPage? {
+        state()
+        val age = System.currentTimeMillis() - (rankSavedAt[type] ?: return null)
+        return rankHomes[type].takeIf { age in 0..7 * 24 * 60 * 60 * 1000L }
+    }
+    fun cacheRank(type: RankType, items: List<Series>, hasMore: Boolean) {
+        state()
+        if (items.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val retained = items.take(30).map { it.copy(description = it.description.take(1500)) }
+        rankHomes[type] = CatalogPage(retained, hasMore)
+        rankSavedAt[type] = now
+        homeWrites.submit(mapOf("rank-${type.name}" to { CatalogSnapshot.encode(retained, hasMore, now) }))
     }
     var maxQuality: Int
         get() = state().settings.quality

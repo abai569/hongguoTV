@@ -57,10 +57,13 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         return Series(o.str("series_id"),o.str("series_name").ifEmpty { o.str("series_title").ifEmpty { item.str("name") } },cleanUrl(o.str("series_cover")),o.str("series_intro"),o.str("episode_right_text").ifEmpty { if(count>0) "全 ${count} 集" else "" },(0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
     }
     private fun valid(rows: List<Series>) = rows.filter { it.id.matches(Regex("[0-9]{1,30}")) && it.title.isNotBlank() }.distinctBy { it.id }
-    fun comicRanking(page: Int = 1): CatalogPage {
+    fun ranking(type: RankType, page: Int = 1): CatalogPage {
         require(page in 1..100)
-        return ComicRank.parse(text("$site/rank/hot-comic-drama?page=$page"),page)
+        return ComicRank.parse(text("$site/rank/${type.slug}?page=$page"),page,type)
     }
+    fun comicRanking(page: Int = 1): CatalogPage = ranking(RankType.COMIC,page)
+    /** First ranking page for each home "hot" section, in website order. */
+    fun homeCategories(): List<Pair<RankType,CatalogPage>> = RankType.entries.map { it to ranking(it,1) }
     fun home(page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage {
         require(page in 1..100)
         if(type==ContentType.COMIC) return comicRanking(page)
