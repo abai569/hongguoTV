@@ -61,7 +61,7 @@ class HomeScreen(
     private var lastFocus=""
     private var restoring=false
     private var revision=0
-    val refresh=label("正在更新热门…",13f).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=true; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(8),dp(12),dp(8)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() } }
+    val refresh=label("正在更新热门…",13f).apply { id=View.generateViewId(); tag="home:refresh"; isFocusable=true; isFocusableInTouchMode=BuildConfig.CHANNEL=="tv"; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(8),dp(12),dp(8)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() } }
     init { orientation=VERTICAL; scroll.addView(contents); addView(scroll,LayoutParams(-1,0,1f)) }
 
     fun capturePosition(): Position {
@@ -94,7 +94,7 @@ class HomeScreen(
 
     /** Retry visible cover requests after the owner cancels work for a page or lifecycle change. */
     fun reloadArtwork() {
-        loadNearbySelection()
+        cards.values.forEach(::requestCover)
     }
 
     fun render(shelves: List<Shelf>,focus: String,requestFocus: Boolean,more: (() -> Unit)?,position: Position?=null) {
@@ -117,7 +117,8 @@ class HomeScreen(
             val moreAction=shelf.more
             val totalCount=entries.size+if(moreAction!=null) 1 else 0
             val rowCount=(totalCount+perRow-1)/perRow
-            val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/perRow).toInt().coerceAtLeast(dp(100))
+            val gaps=dp(14)*(perRow-1)+dp(4)
+            val width=((resources.displayMetrics.widthPixels*.9f-gaps)/perRow).toInt().coerceAtLeast(dp(100))
             for(rowIndex in 0 until rowCount) {
                 val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
                 val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
@@ -129,7 +130,7 @@ class HomeScreen(
                     val entry=if(index<entries.size) entries[index] else null
                     val action=if(index<entries.size) null else moreAction!!
                     val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
-                    val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(4),dp(4),dp(4),dp(8)); background=TvStyle.focusBackground(context) }
+                    val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=BuildConfig.CHANNEL=="tv"; setPadding(dp(4),dp(4),dp(4),dp(8)); background=TvStyle.focusBackground(context) }
                     val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
                     view.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                     val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
@@ -150,18 +151,19 @@ class HomeScreen(
                             if(!restoring) loadNearbySelection()
                         }
                     }
-                    line.addView(view,LayoutParams(width,-2).apply { rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
+                    line.addView(view,LayoutParams(width,-2).apply { if(columnIndex<perRow-1) rightMargin=dp(14) }); lineCards+=card; rowCards+=card; cards[key]=card
                 }
                 lines+=Line(horizontal,lineCards)
             }
             contents.addView(block,LayoutParams(-1,-2).apply { bottomMargin=dp(16) }); rows+=Row(shelf.key,block,lines,rowCards)
         }
+        cards.values.forEach(::requestCover)
         if(cards.isEmpty()) contents.addView(label("还没有本机记录，热门剧加载后可选择观看。",15f).apply { setPadding(0,dp(16),0,dp(16)) })
         if(!refreshPlaced) contents.addView(refresh,LayoutParams(-1,-2).apply { topMargin=dp(10) })
         val footer=mutableListOf<View>()
         if(!refreshPlaced) footer+=refresh
         if(more!=null) {
-            val next=label("更多热门  ›",15f).apply { id=View.generateViewId(); tag="home:more"; isFocusable=true; isFocusableInTouchMode=true; setPadding(dp(12),dp(12),dp(12),dp(12)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() }; setOnClickListener { more() } }
+            val next=label("更多热门  ›",15f).apply { id=View.generateViewId(); tag="home:more"; isFocusable=true; isFocusableInTouchMode=BuildConfig.CHANNEL=="tv"; setPadding(dp(12),dp(12),dp(12),dp(12)); background=TvStyle.focusBackground(context); setOnFocusChangeListener { _,f -> TvStyle.animateFocus(this,f); if(f) lastFocus=tag.toString() }; setOnClickListener { more() } }
             contents.addView(next,LayoutParams(-1,-2).apply { topMargin=dp(8) }); footer+=next; moreButton=next
         }
         val hotIndex=if(refreshPlaced) rows.indexOfFirst { it.key=="hot" } else -1

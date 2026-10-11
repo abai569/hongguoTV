@@ -311,7 +311,6 @@ class MainActivity: Activity() {
         root.removeAllViews(); root.setBackgroundColor(bg)
         val container=column(); val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
         container.setPadding(horizontal,vertical,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
-        if(title!=null) { val heading=row(); addButton(heading,"‹ 返回") { goBack() }; heading.addView(text(title,22f).apply { setTypeface(null,Typeface.BOLD) },lp(0,dp(44)).apply { weight=1f }); container.addView(heading) }
         return container
     }
     private fun loadCover(view: ImageView,url: String) {
@@ -442,9 +441,11 @@ class MainActivity: Activity() {
         val top=column()
         if(phone) {
             top.setPadding(0,0,0,dp(6))
-            val stack=column().apply { gravity=Gravity.END }; stack.addView(clockText); stack.addView(memberText)
+            val clockRow=row().apply { gravity=Gravity.END }
+            clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
+            clockRow.addView(clockText)
+            val stack=column().apply { gravity=Gravity.END }; stack.addView(clockRow); stack.addView(memberText)
             val header=row().apply { gravity=Gravity.CENTER_VERTICAL }
-            header.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
             header.addView(Space(this),lp(0,1).apply { weight=1f })
             header.addView(stack)
             top.addView(header)
@@ -752,7 +753,7 @@ class MainActivity: Activity() {
         val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
         val top=if(inlineHomeFilters()) nav[0] else typeButtons.getValue(library.contentType)
         val home=HomeScreen(this,top,::loadCover,{ item,label -> preview.show(item,if(label.startsWith("第 ")) selectionStatus(item) else listOf(label,selectionStatus(item)).filter { it.isNotBlank() }.joinToString(" · ")) },
-            { item,resume -> openDetail(item,resume || !isTvDevice) },::quickActions,{ catalogFocus=it })
+            { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it })
         homeScreen=home; body.addView(home,lp(-1,0).apply { weight=1f })
         home.render(homeShelves(),catalogFocus,!focusNav && !focusType,null,homePosition)
         home.refresh.text=if(loading) if(homeFromCache) "已显示上次内容 · 正在更新热门…" else "正在更新热门…" else "刷新热门"
@@ -773,7 +774,7 @@ class MainActivity: Activity() {
         val preview=SeriesPreview(this); selectionPreview=preview; body.addView(preview)
         val top=rankRefresh ?: nav[2]
         val board=HomeScreen(this,top,::loadCover,{ item,label -> preview.show(item,listOf(label,selectionStatus(item)).filter { it.isNotBlank() }.joinToString(" · ")) },
-            { item,resume -> openDetail(item,resume || !isTvDevice) },::quickActions,{ catalogFocus=it })
+            { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it })
         homeScreen=board; body.addView(board,lp(-1,0).apply { weight=1f })
         board.render(rankShelves(true),catalogFocus,!focusNav && !focusType,null,null)
         rankRefresh?.nextFocusDownId=board.firstId()
