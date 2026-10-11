@@ -12,13 +12,17 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
                      val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
     /** Try each proxy in order (for networks where GitHub is slow), then direct GitHub. */
-    val downloadUrls get() = DOWNLOAD_PROXIES.map { "$it$RELEASES/download/$tag/$fileName" } + "$RELEASES/download/$tag/$fileName"
+    val downloadUrls get() = run {
+        val path = "$RELEASES/download/$tag/${URLEncoder.encode(fileName, "UTF-8").replace("+", "%20")}"
+        DOWNLOAD_PROXIES.map { it + path } + path
+    }
     companion object {
         const val REPOSITORY = "abai569/hongguoTV"
         const val RELEASES = "https://github.com/$REPOSITORY/releases"
@@ -33,7 +37,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 26..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex("kotlin-v[0-9][0-9A-Za-z.+-]{0,80}")))
-            require(update.fileName.matches(Regex("hongguotv-kotlin-[0-9][0-9A-Za-z.+-]{0,80}-android8\\.apk")))
+            require(update.fileName.matches(Regex("(短剧TV|hongguotv-kotlin|hongguotv)-[0-9][0-9A-Za-z.+-]{0,80}(-android8)?\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
         }

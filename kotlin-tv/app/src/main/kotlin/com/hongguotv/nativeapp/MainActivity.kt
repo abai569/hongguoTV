@@ -1076,10 +1076,6 @@ class MainActivity: Activity() {
             playerView=view; root.addView(view,FrameLayout.LayoutParams(-1,-1))
             pauseIcon=android.widget.ImageView(this).apply {
                 setImageResource(android.R.drawable.ic_media_pause); setColorFilter(android.graphics.Color.WHITE)
-                background=android.graphics.drawable.GradientDrawable().apply {
-                    shape=android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(android.graphics.Color.argb(150,0,0,0))
-                }
                 setPadding(dp(24),dp(24),dp(24),dp(24))
                 visibility=View.GONE
             }; root.addView(pauseIcon,FrameLayout.LayoutParams(dp(96),dp(96)).apply { gravity=android.view.Gravity.CENTER })

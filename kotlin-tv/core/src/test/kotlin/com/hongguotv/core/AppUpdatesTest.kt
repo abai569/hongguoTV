@@ -13,7 +13,7 @@ class AppUpdatesTest {
     private val bytes = "signed-apk-test-bytes".toByteArray()
     private fun json() = JSONObject().put("schema", 1).put("packageName", "com.hongguotv.nativeapp")
         .put("versionCode", 10001).put("versionName", "0.9.0+1").put("minSdk", 26).put("tag", "kotlin-v0.9.0-build.1")
-        .put("apk", JSONObject().put("name", "hongguotv-kotlin-0.9.0-build.1-android8.apk").put("size", bytes.size)
+        .put("apk", JSONObject().put("name", "短剧TV-0.9.0-build.1.apk").put("size", bytes.size)
             .put("sha256", MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }))
     private fun update() = AppUpdate.parse(json().toString())
     private fun withFile(block: (File) -> Unit) {
@@ -26,16 +26,22 @@ class AppUpdatesTest {
     }
     @Test fun downloadUrlUsesOnlyFixedRepositoryAndValidatedNames() {
         assertEquals(listOf(
-            "https://ghfast.top/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk",
-            "https://git-proxy.abai.eu.org/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk",
-            "https://gh-proxy.com/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk",
-            "https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk"
+            "https://ghfast.top/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://git-proxy.abai.eu.org/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://gh-proxy.com/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk"
         ), update().downloadUrls)
-        for (value in listOf("../../bad.apk", "evil.apk", "https://example.com/evil.apk", "hongguotv-kotlin-1/2-android8.apk")) {
+        for (value in listOf("../../bad.apk", "evil.apk", "https://example.com/evil.apk", "短剧TV-1/2.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", value)
             assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
         }
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("tag", "../../other").toString()) }
+    }
+    @Test fun legacyArtifactNamesStillParse() {
+        for (name in listOf("hongguotv-1.6.2.apk", "hongguotv-kotlin-0.9.0-build.1-android8.apk")) {
+            val o = json(); o.getJSONObject("apk").put("name", name)
+            assertEquals(name, AppUpdate.parse(o.toString()).fileName)
+        }
     }
     @Test fun rejectOtherPackageAndInvalidSchema() {
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("packageName", "other.app").toString()) }
