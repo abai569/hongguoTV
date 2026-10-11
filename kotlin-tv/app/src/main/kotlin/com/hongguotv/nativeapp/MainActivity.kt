@@ -1020,13 +1020,14 @@ class MainActivity: Activity() {
         val meta=text("${data.episodes.size} 集  ·  ${data.series.tags}",13f,muted).apply { maxLines=1; setPadding(0,dp(8),0,dp(8)) }
         val synopsis=text(description,15f,muted).apply { maxLines=if(!phone && synopsisExpanded) 20 else 2; ellipsize=TextUtils.TruncateAt.END }
         if(phone) {
-            val coverRow=row().apply { setPadding(0,dp(12),0,dp(4)) }
-            coverRow.addView(cover,lp(dp(96),dp(136))); coverRow.addView(Space(this),lp(0,1).apply { weight=1f })
-            content.addView(coverRow)
-            content.addView(title)
-            content.addView(meta)
-            content.addView(synopsis)
-            val actions=row().apply { setPadding(0,dp(12),0,0) }
+            val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(8))
+            hero.addView(cover,lp(dp(96),dp(136)).apply { rightMargin=dp(14) })
+            val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
+            info.addView(title)
+            info.addView(meta)
+            info.addView(synopsis)
+            content.addView(hero)
+            val actions=row().apply { setPadding(0,dp(4),0,0) }
             play=button(playLabel,onClick=playAction); actions.addView(play,lp(0,-2).apply { weight=1.4f; rightMargin=dp(6) })
             favorite=button(favoriteLabel,onClick=favoriteAction); actions.addView(favorite,lp(0,-2).apply { weight=1f; rightMargin=dp(6) })
             actions.addView(button("完整简介") { showSynopsis(data.series.title,description) },lp(0,-2).apply { weight=1f })
@@ -1039,8 +1040,8 @@ class MainActivity: Activity() {
             info.addView(meta)
             info.addView(synopsis)
             val actions=row(); actions.setPadding(0,dp(12),0,0); info.addView(actions)
-            play=button(playLabel,onClick=playAction); actions.addView(play,lp().apply { rightMargin=dp(8) })
-            favorite=button(favoriteLabel,onClick=favoriteAction); actions.addView(favorite,lp().apply { rightMargin=dp(8) })
+            play=button(playLabel,onClick=playAction); actions.addView(play,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
+            favorite=button(favoriteLabel,onClick=favoriteAction); actions.addView(favorite,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
             lateinit var synopsisButton: TextView
             synopsisButton=button(if(synopsisExpanded) "收起简介" else "完整简介") {
                 synopsisExpanded=!synopsisExpanded
@@ -1048,7 +1049,7 @@ class MainActivity: Activity() {
                 synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
                 synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
             }
-            actions.addView(synopsisButton,lp().apply { rightMargin=dp(8) })
+            actions.addView(synopsisButton,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
             content.addView(hero)
         }
         val gs=episodeGroupSize()
