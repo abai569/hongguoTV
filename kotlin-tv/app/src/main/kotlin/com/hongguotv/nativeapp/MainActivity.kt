@@ -223,8 +223,10 @@ class MainActivity: Activity() {
     private val seekRunnable=Runnable { pendingSeek?.let { player?.seekTo(it) }; pendingSeek=null }
     private fun dp(value: Number)=(value.toFloat()*resources.displayMetrics.density).toInt()
     private fun widthDp()=resources.displayMetrics.widthPixels/resources.displayMetrics.density
-    private fun columns()=if(widthDp()>=900) 6 else 3
-    private fun episodeColumns()=if(widthDp()>=600) 10 else 5
+    private fun columns()=if(BuildConfig.CHANNEL=="phone") 3 else 6
+    private fun homeCardWidth()=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.4f).toInt() else 0
+    private fun episodeGroupSize()=if(BuildConfig.CHANNEL=="phone") 40 else 20
+    private fun episodeColumns()=if(BuildConfig.CHANNEL=="phone") 5 else 10
     private fun applyOrientation(playing: Boolean) {
         if(BuildConfig.CHANNEL!="phone") return
         requestedOrientation=if(playing) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -445,10 +447,11 @@ class MainActivity: Activity() {
             val clockRow=row()
             clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
             clockRow.addView(clockText)
-            val stack=column().apply { gravity=Gravity.END }; stack.addView(clockRow); stack.addView(memberText)
+            clockText.gravity=Gravity.START; memberText.gravity=Gravity.START
+            val stack=column().apply { gravity=Gravity.START }; stack.addView(clockRow); stack.addView(memberText)
             val header=row().apply { gravity=Gravity.CENTER_VERTICAL }
-            header.addView(Space(this),lp(0,1).apply { weight=1f })
             header.addView(stack)
+            header.addView(Space(this),lp(0,1).apply { weight=1f })
             top.addView(header)
             val strip=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
             strip.addView(navRow)
@@ -793,7 +796,7 @@ class MainActivity: Activity() {
                 else item.badge.ifBlank { "查看剧集" }
             HomeScreen.Entry(item,label)
         }
-        val cw=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.4f).toInt() else 0
+        val cw=homeCardWidth()
         if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },columns(),cw)
     }
     private fun homeShelves(): List<HomeScreen.Shelf> {
@@ -804,11 +807,11 @@ class MainActivity: Activity() {
             HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
                 "第 ${p.episodeIndex+1} 集 · ${if(p.completed) "接着看下一集" else formatTime(p.position)}",true,
                 if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) },
-                if(recent.size>8) { { showCollection("resume") } } else null,columns()),
+                if(recent.size>8) { { showCollection("resume") } } else null,columns(),homeCardWidth()),
             HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,library.favoriteLabel(it.id),true) },
-                if(updates.size>8) { { showCollection("updates") } } else null,columns()),
+                if(updates.size>8) { { showCollection("updates") } } else null,columns(),homeCardWidth()),
             HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
-                if(later.size>10) { { showCollection("later") } } else null,columns()))
+                if(later.size>10) { { showCollection("later") } } else null,columns(),homeCardWidth()))
         return local.filter { it.entries.isNotEmpty() } + rankShelves(false)
     }
     private fun refreshLibraryCards(changedId: String,removed: Boolean=false) {
@@ -971,7 +974,7 @@ class MainActivity: Activity() {
             detail=result; library.observeFavorite(series.id,result.episodes.size,System.currentTimeMillis(),acknowledge=true)
             val progress=library.progress(series.id)
             val target=ResumePlayback.target(result.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
-            episodeIndex=target.index; group=episodeIndex/20
+            episodeIndex=target.index; group=episodeIndex/episodeGroupSize()
             if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else { prefetchEpisode(target.index); showDetail(false) }
         }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay) } })
     }
@@ -979,15 +982,16 @@ class MainActivity: Activity() {
         invalidatePage(); releaseCatalogViews(); screen="detail"; val data=detail ?: return showCatalog(); applyOrientation(false)
         val body=base("剧集详情")
         val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false }; val content=column(); scroll.addView(content); body.addView(scroll,lp(-1,0).apply { weight=1f })
+        val phone=BuildConfig.CHANNEL=="phone"
         val hero=row(); hero.gravity=Gravity.TOP; hero.setPadding(0,dp(12),0,dp(12))
-        val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER }; hero.addView(image,lp(dp(123),dp(174)).apply { rightMargin=dp(24) }); loadCover(image,data.series.cover)
+        val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER }; hero.addView(image,lp(if(phone) dp(96) else dp(123),if(phone) dp(136) else dp(174)).apply { rightMargin=if(phone) dp(14) else dp(24) }); loadCover(image,data.series.cover)
         val info=column(); hero.addView(info,lp(0,-2).apply { weight=1f })
-        info.addView(text(data.series.title,26f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END })
+        info.addView(text(data.series.title,if(phone) 22f else 26f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END })
         info.addView(text("${data.episodes.size} 集  ·  ${data.series.tags}",13f,muted).apply { maxLines=1; setPadding(0,dp(8),0,dp(8)) })
         val description=data.series.description.ifBlank { "选择剧集开始观看" }
         val synopsis=text(description,15f,muted).apply { maxLines=if(synopsisExpanded) 20 else 2; ellipsize=TextUtils.TruncateAt.END }
         info.addView(synopsis)
-        val actions=row(); actions.setPadding(0,dp(12),0,0); info.addView(actions)
+        val actions=row(); actions.setPadding(0,dp(12),0,0)
         val progress=library.progress(data.series.id)
         val resumeIndex=progress?.let { data.episodes.indexOf(it.episodeId).takeIf { n -> n>=0 } } ?: 0
         val resumePosition=progress?.takeIf { !it.completed && resumeIndex==it.episodeIndex }?.position ?: 0
@@ -1001,15 +1005,24 @@ class MainActivity: Activity() {
             favorite.text=if(saved) "已收藏" else "收藏"
         }
         lateinit var synopsisButton: TextView
-        synopsisButton=addButton(actions,if(synopsisExpanded) "收起简介" else "完整简介") {
+        val synopsisToggle: ()->Unit = {
             synopsisExpanded=!synopsisExpanded
             synopsis.maxLines=if(synopsisExpanded) 20 else 2
             synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
             synopsisButton.post { synopsisButton.requestRectangleOnScreen(android.graphics.Rect(0,0,synopsisButton.width,synopsisButton.height),false) }
         }
+        val synopsisLabel=if(synopsisExpanded) "收起简介" else "完整简介"
+        if(phone) {
+            val synRow=row(); synRow.setPadding(0,dp(8),0,0); info.addView(synRow)
+            synopsisButton=addButton(synRow,synopsisLabel,onClick=synopsisToggle)
+        } else {
+            synopsisButton=addButton(actions,synopsisLabel,onClick=synopsisToggle)
+        }
+        info.addView(actions)
         content.addView(hero)
-        val maxGroup=data.episodes.lastIndex/20; group=group.coerceIn(0,maxGroup)
-        val groupLabel="第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集"
+        val gs=episodeGroupSize()
+        val maxGroup=data.episodes.lastIndex/gs; group=group.coerceIn(0,maxGroup)
+        val groupLabel="第 ${group*gs+1}—${minOf((group+1)*gs,data.episodes.size)} 集"
         if(BuildConfig.CHANNEL=="phone") {
             val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
             val previous=button("‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
@@ -1020,7 +1033,7 @@ class MainActivity: Activity() {
             content.addView(groupRow)
             val jumpRow=row()
             lateinit var jump: TextView
-            jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
+            jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
             jumpRow.addView(jump,lp(-1,dp(46)))
             content.addView(jumpRow)
         } else {
@@ -1029,19 +1042,19 @@ class MainActivity: Activity() {
             groupRow.addView(text(groupLabel,16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
             addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
             lateinit var jump: TextView
-            jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
+            jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
             content.addView(groupRow)
         }
         val episodes=mutableListOf<View>()
         val epCols=episodeColumns()
-        (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(epCols).forEach { numbers ->
+        (group*gs until minOf((group+1)*gs,data.episodes.size)).toList().chunked(epCols).forEach { numbers ->
             val line=row()
             numbers.forEach { index -> val item=button("${index+1}",index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }; item.contentDescription="第 ${index+1} 集"; line.addView(item,lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }); episodes+=item }
             repeat(epCols-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
             content.addView(line,lp(-1,dp(49)))
         }
         episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%epCols==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%epCols==epCols-1 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=epCols) v.nextFocusUpId=episodes[i-epCols].id; v.nextFocusDownId=if(i+epCols<episodes.size) episodes[i+epCols].id else v.id }
-        if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
+        if(focusEpisode) episodes.getOrNull((episodeIndex-group*gs).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
     }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false) {
         updater.interrupt()
@@ -1067,7 +1080,7 @@ class MainActivity: Activity() {
         if(!recovering) recovery.reset()
         autoRecovery=false; readySince=0; startPosition=position.coerceAtLeast(0); requestedAutoplay=autoplay
         if(autoplay) sleepStopped=false
-        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/20; applyOrientation(true)
+        screen="player"; episodeIndex=selectedIndex; group=episodeIndex/episodeGroupSize(); applyOrientation(true)
         panel=false; playError=false; playbackReady=false; quality=""; pausedForLifecycle=!autoplay
         player?.playWhenReady=requestedAutoplay
         prefetchAttempts=0; prefetchAttemptAt=0
