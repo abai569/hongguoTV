@@ -53,7 +53,7 @@ class HomeScreen(
     private fun shape(focus: Boolean)=TvStyle.card(context,focus)
     private fun label(value: String,size: Float,color: Int=TvStyle.text)=TextView(context).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private val scroll=ScrollView(context).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
-    private val contents=LinearLayout(context).apply { orientation=VERTICAL }
+    private val contents=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
     private val rows=mutableListOf<Row>()
     private val cards=linkedMapOf<String,Card>()
     private var shelves=emptyList<Shelf>()
@@ -105,7 +105,7 @@ class HomeScreen(
         contents.removeAllViews(); rows.clear(); cards.clear(); moreButton=null; lastRow=null
         var refreshPlaced=false
         shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
-            val block=LinearLayout(context).apply { orientation=VERTICAL }
+            val block=LinearLayout(context).apply { orientation=VERTICAL; clipChildren=false }
             val heading=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),dp(4),dp(2),dp(9)) }
             heading.addView(View(context).apply { background=TvStyle.shape(context,accent,radius=2) },LayoutParams(dp(3),dp(14)).apply { rightMargin=dp(8) })
             heading.addView(label(shelf.title,16f).apply { setTypeface(null,Typeface.BOLD) },LayoutParams(0,-2,1f))
@@ -121,8 +121,8 @@ class HomeScreen(
             val rowCount=(totalCount+perRow-1)/perRow
             val width=((resources.displayMetrics.widthPixels*.9f-dp(70))/perRow).toInt().coerceAtLeast(dp(100))
             for(rowIndex in 0 until rowCount) {
-                val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
-                val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP }
+                val horizontal=HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false; clipChildren=false; setPadding(dp(2),dp(2),dp(2),dp(2)) }
+                val line=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.TOP; clipChildren=false }
                 horizontal.addView(line); block.addView(horizontal)
                 val lineCards=mutableListOf<Card>()
                 for(columnIndex in 0 until perRow) {
@@ -147,6 +147,7 @@ class HomeScreen(
                     }
                     view.setOnFocusChangeListener { _,focused ->
                         view.background=shape(focused)
+                        TvStyle.animateFocus(view,focused)
                         if(focused) {
                             lastFocus=key; remember(key); card.entry?.let { selected(it.series,it.label) }
                             if(!restoring) {
@@ -285,5 +286,5 @@ class HomeScreen(
             row.cards.forEach { card -> card.view.getChildAt(0).let { artwork -> if(artwork.layoutParams.height!=desired) artwork.layoutParams=artwork.layoutParams.apply { height=desired } } }
         }
     }
-    fun firstId()=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: refresh.id
+    fun firstId()=rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id
 }

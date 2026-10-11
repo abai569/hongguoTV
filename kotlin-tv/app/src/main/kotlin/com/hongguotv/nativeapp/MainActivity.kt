@@ -224,8 +224,8 @@ class MainActivity: Activity() {
     private fun lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
     private fun rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
-    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; clipChildren=false; clipToPadding=false }
+    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; clipChildren=false; clipToPadding=false }
     private val isTvDevice by lazy {
         packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
         !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
@@ -234,7 +234,7 @@ class MainActivity: Activity() {
         view.id=View.generateViewId(); view.isFocusable=true
         if(isTvDevice) view.isFocusableInTouchMode=true
         fun paint(focused: Boolean) { view.background=rounded(if(focused) TvStyle.raised else if(selected) Color.rgb(61,39,34) else surface,if(focused) accent else Color.TRANSPARENT) }
-        paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused) }
+        paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused); TvStyle.animateFocus(view,focused) }
     }
     private fun button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = text(label,18f).apply {
         gravity=Gravity.CENTER; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(42); focusStyle(this,selected); setOnClickListener { onClick() }
@@ -244,14 +244,14 @@ class MainActivity: Activity() {
     }
     private fun addChips(parent: LinearLayout,pills: List<Pair<String,()->Unit>>): FlowLayout {
         val context=this
-        val flow=FlowLayout(context,dp(8),dp(8))
+        val flow=FlowLayout(context,dp(8),dp(8)).apply { clipChildren=false; clipToPadding=false }
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
                 text=label; textSize=18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(16),dp(12),dp(16),dp(12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
-                setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
+                setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8); TvStyle.animateFocus(this,focused) }
                 setOnClickListener { action() }
             }
             flow.addView(chip,ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -549,7 +549,8 @@ class MainActivity: Activity() {
                 work({ repository.ranking(rankColl,requestPage) }, { result ->
                     catalog=result.items; hasMore=result.hasMore; ranking=result.ranking
                     rankSubtitle?.text=result.ranking?.updatedText?.ifBlank { "来源：红果${rankColl.label}榜" } ?: "来源：红果${rankColl.label}榜"
-                    body.removeAllViews(); catalogGrid(body,focusNav,focusType)
+                    val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
+                    body.removeAllViews(); catalogGrid(body,keepNav,keepType)
                 }, { problem ->
                     catalog=emptyList(); hasMore=false; ranking=null; rankSubtitle?.text="榜单加载失败"
                     body.removeAllViews(); error(body,problem) { showCatalog(true) }
@@ -560,7 +561,8 @@ class MainActivity: Activity() {
                 work({ repository.homeCategories() }, { sections ->
                     homeRank=sections; homeFromCache=false
                     sections.forEach { (type,pageData) -> library.cacheRank(type,pageData.items,pageData.hasMore) }
-                    body.removeAllViews(); catalogGrid(body,focusNav,focusType)
+                    val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
+                    body.removeAllViews(); catalogGrid(body,keepNav,keepType)
                 }, { problem ->
                     if(homeFromCache) {
                         homeScreen?.refresh?.text="当前显示上次内容 · 联网后按确认刷新"
