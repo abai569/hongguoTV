@@ -175,7 +175,7 @@ class MainActivity: Activity() {
             val ticket=++suggestGeneration
             if(value.isEmpty()) { renderSuggestions(emptyList()); return }
             io.submit {
-                val titles=runCatching { repository.searchAll(value,1).items.map { it.title } }.getOrDefault(emptyList()).take(8)
+                val titles=runCatching { repository.searchSuggest(value) }.getOrDefault(emptyList()).take(8)
                 main.post { if(ticket==suggestGeneration && screen=="catalog" && tab==1 && suggestDraft.trim()==value) renderSuggestions(titles) }
             }
         }

@@ -32,6 +32,7 @@ class SearchSessionExpiredException: IOException("搜索结果已过期，请从
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
+    private val suggestionWebId = System.currentTimeMillis().toString()
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
     private fun text(url: String, signed: Signer.Request? = null): String {
@@ -78,7 +79,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             if(result.items.isNotEmpty()) return result
             if(page==1 && isInitialsQuery(keyword)) {
                 for(candidate in runCatching { searchSuggest(keyword) }.getOrDefault(emptyList()).take(5)) {
-                    val suggested=runCatching { appSearch(candidate,1,type) }.getOrNull()
+                    val suggested=runCatching { search(candidate,1,type) }.getOrNull()
                     if(suggested != null && suggested.items.isNotEmpty()) return suggested
                 }
             }
@@ -139,13 +140,13 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         return CatalogPage(items,short.hasMore || comic.hasMore)
     }
     fun searchSuggest(keyword: String): List<String> {
-        val values=VendorConstants.device.toMutableMap()
-        values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0"))
-        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/search/suggest/v/",values)
-        val data=JSONObject(text(signed.url,signed))
-        if(data.optInt("code",-1)!=0) return emptyList()
-        val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
-        return arr.objects().mapNotNull { it.optString("word").ifBlank { null } }.take(10)
+        val query=keyword.trim()
+        if(query.isEmpty()) return emptyList()
+        val url="$site/incent_resource/suggestion?web_id=${Signer.encode(suggestionWebId)}&query=${Signer.encode(query)}&count=10"
+        val data=JSONObject(text(url))
+        if(data.optInt("status",-1)!=200) return emptyList()
+        val arr=data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
+        return arr.objects().mapNotNull { it.str("name").ifBlank { null } }.take(10)
     }
     private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))
     fun searchSuggestRaw(keyword: String): String {
