@@ -445,7 +445,7 @@ class MainActivity: Activity() {
         if(phone) {
             top.setPadding(0,0,0,dp(6))
             val clockRow=row()
-            clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(24),dp(24)).apply { rightMargin=dp(8); gravity=Gravity.CENTER_VERTICAL })
+            clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(16),dp(16)).apply { rightMargin=dp(6); gravity=Gravity.CENTER_VERTICAL })
             clockRow.addView(clockText)
             clockText.gravity=Gravity.START; memberText.gravity=Gravity.START
             val stack=column().apply { gravity=Gravity.START }; stack.addView(clockRow); stack.addView(memberText)
