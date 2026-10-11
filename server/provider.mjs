@@ -2,6 +2,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import crypto from "node:crypto";
 import axios from "axios";
+import { searchWithInitialCandidates } from "./search.mjs";
 
 // Trusted, pinned GPL source. This is a compatibility wrapper, not a sandbox for user scripts.
 const source = fs.readFileSync(
@@ -23,7 +24,7 @@ const context = vm.createContext({
 });
 vm.runInContext(
   source +
-    "\nthis.api = {categoryPage, categoryData, itemToCard, appSearchPage, routerData, resolveStream, prepareHeader, remoteRange, decryptPartial, streamCache, videoInfoCache, pageCache, appSearchCache};",
+    "\nthis.api = {categoryPage, categoryData, itemToCard, appSearchPage, appSearchSuggest, routerData, resolveStream, prepareHeader, remoteRange, decryptPartial, streamCache, videoInfoCache, pageCache, appSearchCache};",
   context,
   { timeout: 5000 }
 );
@@ -52,20 +53,28 @@ export const provider = {
     return { items: cards(pageData.recommendList.map(api.itemToCard)), page };
   },
   async search(keyword, page = 1) {
-    try {
-      const result = await api.appSearchPage(keyword, 11, page, 20);
-      if (result.list.length) return { items: cards(result.list), page };
-    } catch {
-      /* Website fallback; failure below remains an error, never an empty success. */
-    }
-    const data = await api.routerData(
-      `${SITE}/search/${encodeURIComponent(keyword)}?page=${page}`
+    const rawSearch = async (query, requestedPage) => {
+      try {
+        const result = await api.appSearchPage(query, 11, requestedPage, 20);
+        if (result.list.length) return { items: cards(result.list), page: requestedPage };
+      } catch {
+        /* Website fallback; failure below remains an error, never an empty success. */
+      }
+      const data = await api.routerData(
+        `${SITE}/search/${encodeURIComponent(query)}?page=${requestedPage}`
+      );
+      const pageData =
+        data?.loaderData?.["search_(keyword)/page"] ||
+        data?.loaderData?.search_page;
+      if (!Array.isArray(pageData?.searchList)) throw new Error("搜索数据不可用");
+      return { items: cards(pageData.searchList.map(api.itemToCard)), page: requestedPage };
+    };
+    return searchWithInitialCandidates(
+      keyword,
+      page,
+      rawSearch,
+      async (query) => (await api.appSearchSuggest(query)).slice(0, 5)
     );
-    const pageData =
-      data?.loaderData?.["search_(keyword)/page"] ||
-      data?.loaderData?.search_page;
-    if (!Array.isArray(pageData?.searchList)) throw new Error("搜索数据不可用");
-    return { items: cards(pageData.searchList.map(api.itemToCard)), page };
   },
   async detail(id) {
     const data = await api.routerData(`${SITE}/detail?series_id=${id}`);

@@ -401,10 +401,10 @@ function helios(khronos) {
 }
 
 function branchOf(url, body, khronos) { const bodyMd5 = body ? crypto.createHash('md5').update(body).digest() : Buffer.alloc(16); const q = sm3(url.split('?')[1]); const iv = getIv(getIv(getIv(0x20230928, q), bodyMd5), le32(khronos)); const low = iv & 15; return low - (((low * 171) >> 9) * 3); }
-async function signedAppGet(values) {
+async function signedAppGet(values, endpoint = APP_SEARCH_API) {
     const khronos = Math.floor(Date.now() / 1000); const ticket = Date.now();
     const query = pythonUrlEncode({ ...values, ts: String(khronos), _rticket: String(ticket) });
-    const url = `${APP_SEARCH_API}?${query}`;
+    const url = `${endpoint}?${query}`;
     const random = Math.floor(Math.random() * 65536); const body = null;
     const headers = {
         'User-Agent': APP_UA, Accept: 'application/json; charset=utf-8,application/x-protobuf',
@@ -418,6 +418,13 @@ async function signedAppGet(values) {
     const data = jsonBody(resp.data);
     if (resp.status !== 200 || !data || Number(data.code) !== 0) throw new Error(`App search failed: ${data?.message || resp.status}`);
     return data;
+}
+
+async function appSearchSuggest(keyword) {
+    const endpoint = 'https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/suggest/v/';
+    const data = await signedAppGet({ ...APP_DEVICE, query: str(keyword), image_scale: '1', aid: '1967', channel: '0', widget: '2' }, endpoint);
+    const list = Array.isArray(data.suggest_list) ? data.suggest_list : Array.isArray(data.data?.suggest_list) ? data.data.suggest_list : [];
+    return list.map((item) => str(item?.word)).filter(Boolean);
 }
 
 function videoModelUrl() { const query = new URLSearchParams({ ...DEVICE }); return `${VIDEO_API}?${query}`; }

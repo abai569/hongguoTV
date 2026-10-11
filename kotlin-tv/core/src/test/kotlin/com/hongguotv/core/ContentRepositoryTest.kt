@@ -248,6 +248,22 @@ class ContentRepositoryTest {
         assertEquals(2,paths.size)
     }
 
+    @Test fun initialsSearchUsesSuggestedTitleWhenRawQueryHasNoResults() {
+        val queries=mutableListOf<String>()
+        val repo=repository { request ->
+            queries += request.url.queryParameter("query") ?: ""
+            when {
+                request.url.encodedPath.contains("search/suggest") ->
+                    """{"code":0,"suggest_list":[{"word":"我合成了全世界"}]}"""
+                request.url.queryParameter("query") == "WHCLQSJ" ->
+                    """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false}]}"""
+                else -> """{"code":0,"search_tabs":[${searchTab(11,"321")}]}"""
+            }
+        }
+        assertEquals("321",repo.search("WHCLQSJ",1,ContentType.SHORT).items.single().id)
+        assertEquals(listOf("WHCLQSJ","WHCLQSJ","我合成了全世界"),queries)
+    }
+
     @Test fun comicSearchFallsBackToWebsiteWhenAppSearchReturnsEmptyBody() {
         val paths=mutableListOf<String>()
         val repo=repository { request ->

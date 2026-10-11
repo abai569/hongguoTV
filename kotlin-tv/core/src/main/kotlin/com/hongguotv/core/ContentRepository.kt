@@ -73,7 +73,17 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage {
         require(keyword.isNotBlank() && keyword.length<=80 && page in 1..100)
-        try { val result=appSearch(keyword,page,type); if(result.items.isNotEmpty() || !result.hasMore) return result } catch (e: Exception) { if(e is SearchSessionExpiredException) throw e }
+        try {
+            val result=appSearch(keyword,page,type)
+            if(result.items.isNotEmpty()) return result
+            if(page==1 && isInitialsQuery(keyword)) {
+                for(candidate in runCatching { searchSuggest(keyword) }.getOrDefault(emptyList()).take(5)) {
+                    val suggested=runCatching { appSearch(candidate,1,type) }.getOrNull()
+                    if(suggested != null && suggested.items.isNotEmpty()) return suggested
+                }
+            }
+            if(!result.hasMore) return result
+        } catch (e: Exception) { if(e is SearchSessionExpiredException) throw e }
         // The website search does not expose a reliable content type. It is the fallback for
         // both tabs because the app search endpoint can return an empty body after API changes.
         val data=router("$site/search/${Signer.encode(keyword)}?page=$page")
@@ -137,6 +147,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
         return arr.objects().mapNotNull { it.optString("word").ifBlank { null } }.take(10)
     }
+    private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))
     fun searchSuggestRaw(keyword: String): String {
         val values=VendorConstants.device.toMutableMap()
         values.putAll(linkedMapOf("query" to keyword,"image_scale" to "1","aid" to "1967","channel" to "0","widget" to "2"))

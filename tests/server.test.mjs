@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, byteRange } from "../server/http.mjs";
+import {
+  isInitialsQuery,
+  mergeSearchItems,
+  searchWithInitialCandidates,
+} from "../server/search.mjs";
 async function fixture(t, provider, token = "") {
   const server = createServer(provider, token);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -88,4 +93,31 @@ test("bad identifiers and invalid queries never reach provider", async (t) => {
     (await fetch(url + "/api/episodes/https:example/stream")).status,
     404
   );
+});
+test("initial search candidates are merged without duplicate series", () => {
+  assert.equal(isInitialsQuery("WHCLQSJ"), true);
+  assert.equal(isInitialsQuery("万妖图录传"), false);
+  assert.deepEqual(
+    mergeSearchItems(
+      [{ id: "1", title: "原始结果" }],
+      [{ id: "1", title: "重复结果" }, { id: "2", title: "候选结果" }]
+    ),
+    [{ id: "1", title: "原始结果" }, { id: "2", title: "候选结果" }]
+  );
+});
+test("empty initials search retries suggested titles only on the first page", async () => {
+  const queries = [];
+  const result = await searchWithInitialCandidates(
+    "WHCLQSJ",
+    1,
+    async (query) => {
+      queries.push(query);
+      return query === "我合成了全世界"
+        ? { items: [{ id: "9", title: query }], page: 1 }
+        : { items: [], page: 1 };
+    },
+    async () => ["我合成了全世界"]
+  );
+  assert.deepEqual(result.items.map((item) => item.id), ["9"]);
+  assert.deepEqual(queries, ["WHCLQSJ", "我合成了全世界"]);
 });
