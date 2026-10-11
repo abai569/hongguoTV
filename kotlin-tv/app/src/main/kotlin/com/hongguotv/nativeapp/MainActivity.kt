@@ -447,7 +447,6 @@ class MainActivity: Activity() {
             val clockRow=row()
             clockRow.addView(ImageView(this).apply { setImageResource(com.hongguotv.nativeapp.R.drawable.app_icon) },lp(dp(16),dp(16)).apply { rightMargin=dp(6); gravity=Gravity.CENTER_VERTICAL })
             clockRow.addView(clockText)
-            clockText.gravity=Gravity.START; memberText.gravity=Gravity.START
             val stack=column().apply { gravity=Gravity.START }; stack.addView(clockRow); stack.addView(memberText)
             val header=row().apply { gravity=Gravity.CENTER_VERTICAL }
             header.addView(stack)
