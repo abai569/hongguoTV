@@ -217,6 +217,7 @@ class MainActivity: Activity() {
             if(!foreground || isDestroyed) return
             if(screen=="player") {
                 if(sleepTimer.poll()) stopForSleep()
+                if(player?.isPlaying==true) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 if(hud.visibility==View.VISIBLE) updatePlaybackText()
                 maybePrefetch()
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -268,7 +269,7 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                id=View.generateViewId(); text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
+                text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 16),dp(if(small) 8 else 12),dp(if(small) 12 else 16),dp(if(small) 8 else 12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.focusBackground(context)
@@ -570,11 +571,9 @@ class MainActivity: Activity() {
                 keyboard?.setText(searchDraft)
                 val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
-                if(rightTarget!=View.NO_ID) input.nextFocusRightId=rightTarget
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
                 nav.forEach { it.nextFocusDownId=input.id }
             }
-            if(focusNav) nav[tab].requestFocus()
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text("热播榜",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
@@ -1235,7 +1234,7 @@ class MainActivity: Activity() {
             root.removeAllViews(); root.setBackgroundColor(Color.BLACK)
             val view=layoutInflater.inflate(R.layout.player_view,root,false) as PlayerView
             view.apply {
-                resizeMode=frameResizeMode(); isFocusable=false
+                resizeMode=frameResizeMode(); isFocusable=false; keepScreenOn=true
                 setKeepContentOnPlayerReset(true); setShutterBackgroundColor(Color.BLACK); setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 if(!isTvDevice) {
                     var startX=0f; var startY=0f; var startPos=0L; var dragging=false; var vertical=false
@@ -1690,7 +1689,7 @@ class MainActivity: Activity() {
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed()=goBack()
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if(BuildConfig.CHANNEL!="phone" && screen!="player" && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)) {
+        if(BuildConfig.CHANNEL!="phone" && screen!="player" && !(screen=="catalog" && tab==1) && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)) {
             val collected=ArrayList<View>()
             root.addFocusables(collected,View.FOCUS_FORWARD,View.FOCUSABLES_ALL)
             val focusables=LinkedHashSet<View>()

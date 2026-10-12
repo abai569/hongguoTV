@@ -62,8 +62,8 @@ class SearchKeyboard(
         }
         rows.forEachIndexed { rowIndex,row ->
             row.forEachIndexed { column,view ->
-                view.nextFocusLeftId=row[if(column==0) row.lastIndex else column-1].id
-                view.nextFocusRightId=row[if(column==row.lastIndex) 0 else column+1].id
+                if(column>0) view.nextFocusLeftId=row[column-1].id
+                if(column<row.lastIndex) view.nextFocusRightId=row[column+1].id
                 rows.getOrNull(rowIndex-1)?.getOrNull(column)?.let { view.nextFocusUpId=it.id }
                 rows.getOrNull(rowIndex+1)?.getOrNull(column)?.let { view.nextFocusDownId=it.id }
             }
