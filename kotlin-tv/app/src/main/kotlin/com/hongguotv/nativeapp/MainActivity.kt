@@ -268,7 +268,7 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
+                id=View.generateViewId(); text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 16),dp(if(small) 8 else 12),dp(if(small) 12 else 16),dp(if(small) 8 else 12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.focusBackground(context)
@@ -442,8 +442,9 @@ class MainActivity: Activity() {
         if(foreground && library.isLoaded && !favoriteMonitor.running) main.post { if(foreground && screen=="catalog") favoriteMonitor.check() }
         val phone=BuildConfig.CHANNEL=="phone"
         val navRow=row()
+        val navHidden=if(phone) setOf(1,3) else emptySet()
         listOf("首页","搜索","排行榜","收藏","最近观看","设置").forEachIndexed { index,label ->
-            val item=addButton(navRow,label,index==tab) { switchTab(index) }
+            val item=button(label,index==tab) { switchTab(index) }
             fun paint(focused: Boolean) {
                 item.setTextColor(if(focused) bg else if(index==tab) accent else muted)
                 item.background=rounded(if(focused) white else if(index==tab) Color.rgb(48,32,29) else Color.TRANSPARENT)
@@ -453,7 +454,10 @@ class MainActivity: Activity() {
                 paint(focused)
                 if(focused && tab!=index) switchTab(index)
             }; nav+=item
+            if(index !in navHidden) navRow.addView(item,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8) })
         }
+        val navVisible=nav.filterIndexed { i,_ -> i !in navHidden }
+        navVisible.forEachIndexed { i,item -> item.nextFocusLeftId=navVisible[if(i==0) navVisible.lastIndex else i-1].id; item.nextFocusRightId=navVisible[if(i==navVisible.lastIndex) 0 else i+1].id }
         clockText=text("",14f,white).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.END; val lp=lp(-2,-2); lp.gravity=Gravity.CENTER_VERTICAL }
         memberText=text("",14f,Color.rgb(255,180,0)).apply { gravity=Gravity.END; setTypeface(null,Typeface.BOLD) }
         val top=column()
@@ -466,6 +470,14 @@ class MainActivity: Activity() {
             val header=row().apply { gravity=Gravity.CENTER_VERTICAL }
             header.addView(stack)
             header.addView(Space(this),lp(0,1).apply { weight=1f })
+            fun navIcon(res: Int,index: Int)=ImageView(this).apply {
+                setImageResource(res); scaleType=ImageView.ScaleType.FIT_CENTER
+                setColorFilter(if(tab==index) accent else white)
+                setPadding(dp(10),dp(10),dp(10),dp(10)); isClickable=true; isFocusable=false
+                setOnClickListener { switchTab(index) }
+            }
+            header.addView(navIcon(R.drawable.ic_search,1),lp(dp(44),dp(44)))
+            header.addView(navIcon(R.drawable.ic_star,3),lp(dp(44),dp(44)))
             top.addView(header)
             val strip=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
             strip.addView(navRow)
@@ -558,9 +570,11 @@ class MainActivity: Activity() {
                 keyboard?.setText(searchDraft)
                 val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
+                if(rightTarget!=View.NO_ID) input.nextFocusRightId=rightTarget
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
                 nav.forEach { it.nextFocusDownId=input.id }
             }
+            if(focusNav) nav[tab].requestFocus()
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
             heading.addView(text("热播榜",25f).apply { setTypeface(null,Typeface.BOLD) },lp(0,-2).apply { weight=1f })
@@ -726,8 +740,9 @@ class MainActivity: Activity() {
             list.addView(paging,lp(-1,dp(50)))
         }
         cards.forEachIndexed { index,card ->
-            card.nextFocusLeftId=if(index%count==0) card.id else cards[index-1].id
-            card.nextFocusRightId=if(index%count==count-1 || index==cards.lastIndex) card.id else cards[index+1].id
+            val rowStart=index/count*count; val rowEnd=minOf(rowStart+count-1,cards.lastIndex)
+            card.nextFocusLeftId=if(index==rowStart) cards[rowEnd].id else cards[index-1].id
+            card.nextFocusRightId=if(index==rowEnd) cards[rowStart].id else cards[index+1].id
             card.nextFocusUpId=if(index<count) (searchInput?.id ?: collectionBack?.id ?: typeButtons[library.contentType]?.id ?: rankRefresh?.id ?: favoriteCheck?.id ?: historyManage?.id ?: resumeCards.getOrNull(minOf(index,2))?.id ?: nav[tab].id) else cards[index-count].id
             card.nextFocusDownId=if(index+count<cards.size) cards[index+count].id else if(index/count<cards.lastIndex/count) cards.last().id else next?.takeIf { it.isFocusable }?.id ?: prev?.takeIf { it.isFocusable }?.id ?: card.id
         }
@@ -960,8 +975,8 @@ class MainActivity: Activity() {
                 view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
                 view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
             } }
-            left.forEachIndexed { i,v -> v.nextFocusLeftId=v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
-            right.forEachIndexed { i,v -> v.nextFocusLeftId=left.getOrNull(i)?.id ?: v.id; v.nextFocusRightId=v.id }
+            left.forEachIndexed { i,v -> v.nextFocusLeftId=right.getOrNull(i)?.id ?: v.id; v.nextFocusRightId=right.getOrNull(i)?.id ?: v.id }
+            right.forEachIndexed { i,v -> v.nextFocusLeftId=left.getOrNull(i)?.id ?: v.id; v.nextFocusRightId=left.getOrNull(i)?.id ?: v.id }
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
         parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
@@ -1140,9 +1155,12 @@ class MainActivity: Activity() {
             val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
             val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
             groupRow.addView(text(groupLabel,16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
-            addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
+            val next=addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
             lateinit var jump: TextView
             jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
+            previous.nextFocusLeftId=jump.id; previous.nextFocusRightId=next.id
+            next.nextFocusLeftId=previous.id; next.nextFocusRightId=jump.id
+            jump.nextFocusLeftId=next.id; jump.nextFocusRightId=previous.id
             content.addView(groupRow)
         }
         val episodes=mutableListOf<View>()
@@ -1153,7 +1171,13 @@ class MainActivity: Activity() {
             repeat(epCols-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
             content.addView(line,lp(-1,dp(49)))
         }
-        episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%epCols==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%epCols==epCols-1 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=epCols) v.nextFocusUpId=episodes[i-epCols].id; v.nextFocusDownId=if(i+epCols<episodes.size) episodes[i+epCols].id else v.id }
+        episodes.forEachIndexed { i,v ->
+            val rowStart=i/epCols*epCols; val rowEnd=minOf(rowStart+epCols-1,episodes.lastIndex)
+            v.nextFocusLeftId=if(i==rowStart) episodes[rowEnd].id else episodes[i-1].id
+            v.nextFocusRightId=if(i==rowEnd) episodes[rowStart].id else episodes[i+1].id
+            if(i>=epCols) v.nextFocusUpId=episodes[i-epCols].id
+            v.nextFocusDownId=if(i+epCols<episodes.size) episodes[i+epCols].id else v.id
+        }
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*gs).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
     }
     private fun slideEpisode(direction: Int) {

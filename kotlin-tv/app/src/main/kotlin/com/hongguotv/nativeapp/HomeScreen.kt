@@ -195,8 +195,9 @@ class HomeScreen(
         rows.forEachIndexed { i,row ->
             row.lines.forEachIndexed { lineIndex,line ->
                 line.cards.forEachIndexed { column,card ->
-                    card.view.nextFocusLeftId=line.cards.getOrNull(column-1)?.view?.id ?: card.view.id
-                    card.view.nextFocusRightId=line.cards.getOrNull(column+1)?.view?.id ?: card.view.id
+                    val lineCount=line.cards.size
+                    card.view.nextFocusLeftId=line.cards[if(column==0) lineCount-1 else column-1].view.id
+                    card.view.nextFocusRightId=line.cards[if(column==lineCount-1) 0 else column+1].view.id
                     val upCard=row.lines.getOrNull(lineIndex-1)?.cards?.getOrNull(column) ?: rows.getOrNull(i-1)?.lines?.lastOrNull()?.cards?.getOrNull(column)
                     card.view.nextFocusUpId=when {
                         upCard!=null -> upCard.view.id

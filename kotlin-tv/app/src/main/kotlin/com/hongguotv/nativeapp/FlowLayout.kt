@@ -48,5 +48,23 @@ class FlowLayout(context: Context, private val horizontalGap: Int, private val v
             x+=childWidth+horizontalGap
             lineHeight=maxOf(lineHeight,childHeight)
         }
+        applyFocusWrap()
+    }
+    /** Connect each visual row end-to-end so D-pad left/right wraps within the row. */
+    private fun applyFocusWrap() {
+        val rows=mutableListOf<MutableList<View>>()
+        var rowTop=Int.MIN_VALUE
+        for(index in 0 until childCount) {
+            val child=getChildAt(index)
+            if(child.visibility!=View.VISIBLE) continue
+            if(rows.isEmpty() || child.top!=rowTop) { rows.add(mutableListOf()); rowTop=child.top }
+            rows.last().add(child)
+        }
+        rows.forEach { row ->
+            row.forEachIndexed { i,view ->
+                view.nextFocusLeftId=row[if(i==0) row.lastIndex else i-1].id
+                view.nextFocusRightId=row[if(i==row.lastIndex) 0 else i+1].id
+            }
+        }
     }
 }

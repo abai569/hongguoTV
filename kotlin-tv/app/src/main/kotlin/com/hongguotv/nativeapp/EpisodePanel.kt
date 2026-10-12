@@ -67,8 +67,9 @@ class EpisodePanel(
             grid.addView(row)
         }
         cells.forEachIndexed { i,cell ->
-            cell.nextFocusLeftId=cells[if(i%5==0) i else i-1].id
-            cell.nextFocusRightId=cells[if(i%5==4 || i==cells.lastIndex) i else i+1].id
+            val rowStart=i/5*5; val rowEnd=minOf(rowStart+4,cells.lastIndex)
+            cell.nextFocusLeftId=cells[if(i==rowStart) rowEnd else i-1].id
+            cell.nextFocusRightId=cells[if(i==rowEnd) rowStart else i+1].id
             cell.nextFocusUpId=if(i>=5) cells[i-5].id else if(i<3 && previous.isFocusable) previous.id else if(next.isFocusable) next.id else jump.id
             cell.nextFocusDownId=cells[if(i+5<cells.size) i+5 else if(i/5<cells.lastIndex/5) cells.lastIndex else i].id
         }
@@ -76,7 +77,7 @@ class EpisodePanel(
         previous.nextFocusDownId=cells.first().id; next.nextFocusDownId=cells[minOf(4,cells.lastIndex)].id
         close.nextFocusDownId=if(previous.isFocusable) previous.id else cells.first().id
         jump.nextFocusDownId=if(next.isFocusable) next.id else cells[minOf(4,cells.lastIndex)].id
-        close.nextFocusLeftId=close.id; close.nextFocusRightId=jump.id; jump.nextFocusLeftId=close.id; jump.nextFocusRightId=jump.id
+        close.nextFocusLeftId=jump.id; close.nextFocusRightId=jump.id; jump.nextFocusLeftId=close.id; jump.nextFocusRightId=close.id
         dialog.setContentView(content)
         cells[(focused-group*20).coerceIn(0,cells.lastIndex)].requestFocus()
     }

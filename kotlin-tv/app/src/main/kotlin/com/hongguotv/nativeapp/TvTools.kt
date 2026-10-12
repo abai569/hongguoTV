@@ -87,12 +87,14 @@ class TvTools(private val activity: Activity) {
         val locate=next.getButton(AlertDialog.BUTTON_POSITIVE)
         val cancel=next.getButton(AlertDialog.BUTTON_NEGATIVE)
         buttons.forEachIndexed { i,button ->
-            button.nextFocusLeftId=buttons[if(i%3==0) i else i-1].id
-            button.nextFocusRightId=buttons[if(i%3==2) i else i+1].id
+            val rowStart=i/3*3; val rowEnd=minOf(rowStart+2,buttons.lastIndex)
+            button.nextFocusLeftId=buttons[if(i==rowStart) rowEnd else i-1].id
+            button.nextFocusRightId=buttons[if(i==rowEnd) rowStart else i+1].id
             button.nextFocusUpId=buttons[if(i<3) i else i-3].id
             button.nextFocusDownId=if(i<9) buttons[i+3].id else locate.id
         }
         locate.nextFocusUpId=buttons[10].id; cancel.nextFocusUpId=buttons[9].id
+        locate.nextFocusLeftId=cancel.id; locate.nextFocusRightId=cancel.id; cancel.nextFocusLeftId=locate.id; cancel.nextFocusRightId=locate.id
         next.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val target=EpisodeTarget.parse(digits,count)
             if(target==null) error.text="请输入 1—$count 之间的集数"
