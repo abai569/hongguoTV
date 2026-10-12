@@ -1690,6 +1690,22 @@ class MainActivity: Activity() {
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed()=goBack()
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if(BuildConfig.CHANNEL!="phone" && screen!="player" && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            val collected=ArrayList<View>()
+            root.addFocusables(collected,View.FOCUS_FORWARD,View.FOCUSABLES_ALL)
+            val focusables=LinkedHashSet<View>()
+            collected.forEach { if(it.isShown && it.isEnabled && it.isFocusable && it.id!=View.NO_ID) focusables.add(it) }
+            val list=focusables.toList()
+            if(list.size>1) {
+                val current=root.findFocus()
+                val index=list.indexOfFirst { it===current }
+                if(index>=0) {
+                    val next=if(event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) (index+1)%list.size else (index-1+list.size)%list.size
+                    list[next].requestFocus()
+                    return true
+                }
+            }
+        }
         if(screen=="player") {
             val key=event.keyCode
             if(key==KeyEvent.KEYCODE_BACK) { if(event.action==KeyEvent.ACTION_UP) goBack(); return true }
