@@ -967,17 +967,29 @@ class MainActivity: Activity() {
         parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
+    private fun backupDir(): java.io.File {
+        val dir=java.io.File((getExternalFilesDir(null) ?: filesDir),"backup")
+        if(!dir.exists()) dir.mkdirs()
+        return dir
+    }
+    private fun saveBackupToAppDir(name: String,json: String) {
+        pendingBackupJson=null
+        runCatching { java.io.File(backupDir(),name).writeText(json,Charsets.UTF_8) }
+            .onSuccess { Toast.makeText(this,"已保存到本机：${backupDir().absolutePath}/$name",Toast.LENGTH_LONG).show() }
+            .onFailure { Toast.makeText(this,"备份保存失败：${it.message ?: "请重试"}",Toast.LENGTH_LONG).show() }
+    }
     private fun exportBackup() {
         val encoded=runCatching { LibraryBackup.encode(library.snapshot()) }.getOrElse {
             Toast.makeText(this,"无法生成备份：${it.message ?: "请重试"}",Toast.LENGTH_LONG).show(); return
         }
-        pendingBackupJson=encoded
         val name="橘影备份-"+java.text.SimpleDateFormat("yyyyMMdd-HHmm",java.util.Locale.getDefault()).format(java.util.Date())+".json"
         val intent=android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(android.content.Intent.CATEGORY_OPENABLE)
             .setType("application/json")
             .putExtra(android.content.Intent.EXTRA_TITLE,name)
-        runCatching { startActivityForResult(intent,REQ_EXPORT) }.onFailure { Toast.makeText(this,"无法打开文件选择器",Toast.LENGTH_LONG).show() }
+        if(intent.resolveActivity(packageManager)==null) { saveBackupToAppDir(name,encoded); return }
+        pendingBackupJson=encoded
+        runCatching { startActivityForResult(intent,REQ_EXPORT) }.onFailure { saveBackupToAppDir(name,encoded) }
     }
     private fun importBackup() {
         pendingBackupJson=null
@@ -985,7 +997,16 @@ class MainActivity: Activity() {
             .addCategory(android.content.Intent.CATEGORY_OPENABLE)
             .setType("*/*")
             .putExtra(android.content.Intent.EXTRA_MIME_TYPES,arrayOf("application/json","text/plain","text/*","application/octet-stream"))
-        runCatching { startActivityForResult(intent,REQ_IMPORT) }.onFailure { Toast.makeText(this,"无法打开文件选择器",Toast.LENGTH_LONG).show() }
+        if(intent.resolveActivity(packageManager)!=null && runCatching { startActivityForResult(intent,REQ_IMPORT) }.isSuccess) return
+        val files=backupDir().listFiles { file -> file.isFile && file.name.endsWith(".json") }?.sortedByDescending { it.lastModified() }.orEmpty()
+        if(files.isEmpty()) { Toast.makeText(this,"未找到本地备份文件（目录：${backupDir().absolutePath}）",Toast.LENGTH_LONG).show(); return }
+        AlertDialog.Builder(this).setTitle("从本机文件恢复")
+            .setNegativeButton("取消",null)
+            .setItems(files.map { it.name }.toTypedArray()) { _,index ->
+                runCatching { LibraryBackup.decode(files[index].readText(Charsets.UTF_8)) }
+                    .onSuccess { confirmRestore(it) }
+                    .onFailure { Toast.makeText(this,"恢复失败：${it.message ?: "文件无效"}",Toast.LENGTH_LONG).show() }
+            }.show()
     }
     private fun confirmRestore(data: BackupData) {
         val preview=column()
