@@ -9,7 +9,7 @@ android {
     namespace = "com.hongguotv.nativeapp"
     compileSdk = 36
     defaultConfig {
-        minSdk = 26
+        minSdk = 21
         targetSdk = 33
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 61
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "1.3.0"

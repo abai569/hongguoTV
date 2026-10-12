@@ -141,7 +141,7 @@ class HomeScreen(
                         leftArrow.visibility=if(horizontal.canScrollHorizontally(-1)) View.VISIBLE else View.GONE
                         shelfHint?.visibility=if(more) View.VISIBLE else View.GONE
                     }
-                    horizontal.setOnScrollChangeListener { _,_,_,_,_ -> syncArrows() }
+                    horizontal.viewTreeObserver.addOnScrollChangedListener { syncArrows() }
                     horizontal.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> syncArrows() }
                     horizontal.post { horizontal.post { syncArrows() } }
                     block.addView(holder)

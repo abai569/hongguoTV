@@ -40,7 +40,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=180
+          export HONGGUOTV_VERSION_CODE=181
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
@@ -61,9 +61,9 @@ jobs:
           mv kotlin-tv/app/build/outputs/apk/phone/debug/app-phone-debug.apk "$phone_apk"
           tv_size=$(stat -c%s "$tv_apk"); tv_sha=$(sha256sum "$tv_apk" | awk '{print $1}')
           ph_size=$(stat -c%s "$phone_apk"); ph_sha=$(sha256sum "$phone_apk" | awk '{print $1}')
-          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":26,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影TV %s"}\n' \
+          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":21,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影TV %s"}\n' \
             "$HONGGUOTV_VERSION_CODE" "$version" "$VERSION" "$tv_apk" "$tv_size" "$tv_sha" "$version" > update.json
-          printf '{"schema":1,"packageName":"com.hongguotv.phone","versionCode":%s,"versionName":"%s","minSdk":26,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影 %s"}\n' \
+          printf '{"schema":1,"packageName":"com.hongguotv.phone","versionCode":%s,"versionName":"%s","minSdk":21,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影 %s"}\n' \
             "$HONGGUOTV_VERSION_CODE" "$version" "$VERSION" "$phone_apk" "$ph_size" "$ph_sha" "$version" > update-phone.json
           sha256sum "$tv_apk" "$phone_apk" update.json update-phone.json > SHA256SUMS
       - name: Publish GitHub Release

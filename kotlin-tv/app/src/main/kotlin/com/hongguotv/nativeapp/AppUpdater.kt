@@ -67,7 +67,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         active = true; main.removeCallbacks(poll); main.postDelayed(poll, 8000)
         if (permissionRequested) {
             permissionRequested = false
-            if (activity.packageManager.canRequestPackageInstalls()) install()
+            if (canInstall()) install()
             else { status = "安装权限未开启，可在这里再次安装"; show(anchor) }
         }
     }
@@ -179,16 +179,19 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         val version = candidate.versionCode.toLong()
         if (candidate.packageName != activity.packageName || version <= BuildConfig.VERSION_CODE)
             throw IOException("新版包名或版本不匹配，已阻止安装")
-        val minSdk = candidate.applicationInfo?.minSdkVersion
-        if (minSdk != null && minSdk != update.minSdk)
-            throw IOException("新版最低系统要求不匹配，已阻止安装")
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            val minSdk = candidate.applicationInfo?.minSdkVersion
+            if (minSdk != null && minSdk != update.minSdk)
+                throw IOException("新版最低系统要求不匹配，已阻止安装")
+        }
     }
+    private fun canInstall(): Boolean = android.os.Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls()
     private fun install() {
         val update = available ?: return
         if (busy || !active || !ready) return
         work({ validateApk(update) }) {
             try {
-                if (!activity.packageManager.canRequestPackageInstalls()) {
+                if (!canInstall()) {
                     permissionRequested = true
                     activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
                 } else {

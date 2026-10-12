@@ -118,7 +118,8 @@ class TvTools(private val activity: Activity) {
     }
     private fun centered(value: String,size: Float=17f)=label(value,size).apply { gravity=Gravity.CENTER; setPadding(dp(4),dp(2),dp(4),dp(2)) }
     fun phoneInput(anchor: View?,submit: (String)->Unit,clear: ()->Unit = {}) {
-        val connectivity=activity.getSystemService(ConnectivityManager::class.java)
+        if(android.os.Build.VERSION.SDK_INT<23) { info("手机输入","当前系统不支持局域网联动，请使用遥控键盘输入。",anchor); return }
+        val connectivity=activity.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network=connectivity.activeNetwork
         val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
@@ -145,7 +146,8 @@ class TvTools(private val activity: Activity) {
         }
     }
     fun libraryTransfer(backup: String,anchor: View?,restore: (BackupData,Boolean)->Unit) {
-        val connectivity=activity.getSystemService(ConnectivityManager::class.java)
+        if(android.os.Build.VERSION.SDK_INT<23) { info("备份与恢复","当前系统不支持局域网传输，请使用导出/恢复本地文件。",anchor); return }
+        val connectivity=activity.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network=connectivity.activeNetwork; val capabilities=connectivity.getNetworkCapabilities(network)
         val address=connectivity.getLinkProperties(network)?.linkAddresses?.map { it.address }?.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         if(address==null || capabilities==null || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
