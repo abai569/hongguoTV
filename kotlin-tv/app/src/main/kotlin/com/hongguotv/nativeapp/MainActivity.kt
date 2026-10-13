@@ -710,9 +710,13 @@ class MainActivity: Activity() {
                 val artwork=FrameLayout(this); card.addView(artwork,lp(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                 val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }; artwork.addView(image,FrameLayout.LayoutParams(-1,-1)); loadCover(image,item.cover); cardImages[item.id]=image to item.cover
                 if(showRank) {
-                    val rankLabel=position?.rank?.let { "第 $it 名" } ?: "名次暂无"
-                    artwork.addView(text(rankLabel,15f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(8),dp(5),dp(8),dp(5)); background=rounded(if((position?.rank ?: Int.MAX_VALUE)<=3) accent else Color.rgb(28,31,39)) },FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
-                    card.contentDescription="$rankLabel，${item.title}，${position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"}"
+                    val rank=position?.rank
+                    val rankBadge=text(rank?.toString() ?: "—",13f,if(rank!=null && rank<=3) Color.WHITE else Color.rgb(233,60,60)).apply {
+                        setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER
+                        background=rounded(if(rank!=null && rank<=3) Color.rgb(233,60,60) else Color.WHITE)
+                    }
+                    artwork.addView(rankBadge,FrameLayout.LayoutParams(dp(24),dp(24)).apply { gravity=Gravity.TOP or Gravity.START; setMargins(dp(3),dp(3),dp(3),dp(3)) })
+                    card.contentDescription=(if(rank!=null) "第 $rank 名，" else "")+item.title+"，"+(position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无")
                 }
                 card.addView(text(item.title,14f).apply { maxLines=2; minLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) },lp(-1,-2).apply { weight=1f })
                 val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
@@ -829,9 +833,9 @@ class MainActivity: Activity() {
         val positions=pageData.ranking?.positions
         val entries=pageData.items.filterNot { it.id in library.hidden() }.take(11).map { item ->
             val position=positions?.get(item.id)
-            val label=if(ranked) listOfNotNull(position?.rank?.let { "第 $it 名" },position?.heat?.takeIf { it.isNotBlank() }).joinToString(" · ").ifBlank { item.badge.ifBlank { "查看剧集" } }
+            val label=if(ranked) position?.heat?.takeIf { it.isNotBlank() } ?: item.badge.ifBlank { "查看剧集" }
                 else item.badge.ifBlank { "查看剧集" }
-            HomeScreen.Entry(item,label)
+            HomeScreen.Entry(item,label,rank=position?.rank)
         }
         val cw=homeCardWidth()
         if(entries.isEmpty()) null else HomeScreen.Shelf("rank:${type.name}",type.label,entries,{ showRankCollection(type) },columns(),cw)
@@ -1683,8 +1687,9 @@ class MainActivity: Activity() {
             val current=root.findFocus()
             if(current!=null && all.size>1) {
                 val inNav=nav.any { it===current }
+                val base=all.filter { view -> nav.any { it===view } == inNav }
                 val loc=IntArray(2)
-                val group=all.filter { view -> nav.any { it===view } == inNav }.sortedWith(compareBy(
+                val group=if(screen=="catalog" && tab==1) base.toList() else base.sortedWith(compareBy(
                     { view -> view.getLocationOnScreen(loc); loc[1] },
                     { view -> view.getLocationOnScreen(loc); loc[0] }))
                 val index=group.indexOfFirst { it===current }

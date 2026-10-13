@@ -42,7 +42,7 @@ class HomeScreen(
     private val actions: (Series,View)->Unit,
     private val remember: (String)->Unit
 ): LinearLayout(context) {
-    data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
+    data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null,val rank: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val more: (() -> Unit)?=null,val perRow: Int=6,val cardWidth: Int=0)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
     private data class Card(val key: String,val view: LinearLayout,val image: ImageView?,val title: TextView,val label: TextView,val progress: ProgressBar?,var entry: Entry?,var pending: Boolean=false)
@@ -157,7 +157,15 @@ class HomeScreen(
                     val key=if(entry!=null) "${shelf.key}:${entry.series.id}" else "${shelf.key}:more"
                     val view=LinearLayout(context).apply { orientation=VERTICAL; id=View.generateViewId(); tag=key; isFocusable=true; isFocusableInTouchMode=BuildConfig.CHANNEL=="tv"; setPadding(dp(4),dp(4),dp(4),dp(8)); background=TvStyle.focusBackground(context) }
                     val image=if(entry!=null) ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO } else null
-                    view.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
+                    val artFrame=FrameLayout(context)
+                    artFrame.addView(image ?: label("›",36f).apply { gravity=Gravity.CENTER },FrameLayout.LayoutParams(-1,-1))
+                    val rank=entry?.rank
+                    if(rank!=null) artFrame.addView(label(rank.toString(),13f,android.graphics.Color.WHITE).apply {
+                        setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER
+                        background=TvStyle.shape(context,if(rank<=3) android.graphics.Color.rgb(233,60,60) else android.graphics.Color.WHITE,android.graphics.Color.TRANSPARENT,6)
+                        if(rank>3) setTextColor(android.graphics.Color.rgb(233,60,60))
+                    },FrameLayout.LayoutParams(dp(22),dp(22)).apply { gravity=Gravity.TOP or Gravity.START; setMargins(dp(3),dp(3),dp(3),dp(3)) })
+                    view.addView(artFrame,LayoutParams(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                     val title=label(entry?.series?.title ?: "查看全部",14f).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(5),dp(3),0) }
                     val badge=label(entry?.label ?: shelf.title,12f,TvStyle.muted).apply { minLines=1; maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(2),0,0) }
                     val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; progress=entry?.progress ?: 0; visibility=if(entry?.progress==null) INVISIBLE else VISIBLE; progressTintList=android.content.res.ColorStateList.valueOf(accent) }

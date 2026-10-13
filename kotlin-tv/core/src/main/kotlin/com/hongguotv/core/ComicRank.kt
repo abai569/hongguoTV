@@ -19,10 +19,15 @@ internal object ComicRank {
                 if(name!="r" && name!="mergeLoaderData") continue
                 val args=JSONArray(tag.attr("data-fn-args"))
                 if(args.optString(0)!=type.routeKey) continue
-                val raw=if(name=="r" && args.optString(1)=="content") args.opt(2) else if(name=="mergeLoaderData") {
-                    args.optJSONArray(1)?.objects()?.firstOrNull { it.str("key")=="content" && it.str("routerDataFnName")=="p" }
-                        ?.optJSONArray("routerDataFnArgs")?.opt(0)
-                } else null
+                val raw=when {
+                    name=="r" && args.optString(1)=="content" -> args.opt(2)
+                    name=="mergeLoaderData" -> args.optJSONArray(1)?.objects()?.firstNotNullOfOrNull { entry ->
+                        val option=entry.optJSONArray("routerDataFnArgs")?.opt(0)
+                        val obj=when(option) { is JSONObject -> option; is String -> runCatching { JSONObject(option) }.getOrNull(); else -> null }
+                        obj?.takeIf { it.optJSONArray("rankList")!=null }
+                    }
+                    else -> null
+                }
                 val payload=when(raw) { is JSONObject -> raw; is String -> JSONObject(raw); else -> continue }
                 if(!payload.optBoolean("isSuccess")) throw IOException("${type.label}榜单暂不可用")
                 val rows=payload.optJSONArray("rankList") ?: throw IOException("${type.label}榜单格式已变化")
