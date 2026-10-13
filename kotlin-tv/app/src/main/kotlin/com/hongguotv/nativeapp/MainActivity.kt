@@ -269,11 +269,11 @@ class MainActivity: Activity() {
     private fun addChips(parent: LinearLayout,pills: List<Pair<String,()->Unit>>): FlowLayout {
         val context=this
         val small=BuildConfig.CHANNEL=="phone"
-        val flow=FlowLayout(context,dp(8),dp(8))
+        val flow=FlowLayout(context,dp(8),if(small) dp(8) else dp(3))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                id=View.generateViewId(); text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
-                setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 16),dp(if(small) 8 else 12),dp(if(small) 12 else 16),dp(if(small) 8 else 12))
+                id=View.generateViewId(); text=label; textSize=if(small) 14f else 16f; gravity=Gravity.CENTER; maxLines=if(small) 2 else 1
+                setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 14),dp(if(small) 8 else 11),dp(if(small) 12 else 14),dp(if(small) 8 else 11))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.focusBackground(context)
                 setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(this,focused) }
@@ -568,16 +568,18 @@ class MainActivity: Activity() {
                 body2.addView(panel,lp(-1,-2))
                 searchPanelShown=true
             } else {
-                val left=column(); left.addView(keywordRow); keyboard?.let { left.addView(it) }
+                container.addView(keywordRow,lp(-1,-2))
+                val left=column(); keyboard?.let { left.addView(it) }
                 val area=row(); area.addView(left,lp(0,-1).apply { weight=0.8f; rightMargin=dp(24) })
                 val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
                 rightScroll.addView(panel); area.addView(rightScroll,lp(0,-1).apply { weight=1f })
-                container.addView(area)
+                container.addView(area,lp(-1,0).apply { weight=1f })
                 keyboard?.setText(searchDraft)
                 val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
                 nav.forEach { it.nextFocusDownId=input.id }
+                searchPanelShown=true
             }
         } else if(tab==2) {
             val heading=row().apply { setPadding(0,dp(8),0,dp(6)) }
@@ -1724,9 +1726,17 @@ class MainActivity: Activity() {
                 val inNav=nav.any { it===current }
                 val base=all.filter { view -> nav.any { it===view } == inNav }
                 val loc=IntArray(2)
-                val group=base.sortedWith(compareBy(
-                    { view -> view.getLocationOnScreen(loc); loc[1] },
-                    { view -> view.getLocationOnScreen(loc); loc[0] }))
+                val placed=base.map { view -> view.getLocationOnScreen(loc); Triple(view,loc[1],loc[0]) }.sortedWith(compareBy({ it.second },{ it.third }))
+                val group=mutableListOf<View>()
+                val tolerance=dp(24)
+                var k=0
+                while(k<placed.size) {
+                    val rowTop=placed[k].second
+                    var e=k
+                    while(e<placed.size && placed[e].second-rowTop<=tolerance) e++
+                    placed.subList(k,e).sortedBy { it.third }.forEach { group.add(it.first) }
+                    k=e
+                }
                 val index=group.indexOfFirst { it===current }
                 if(index>=0 && group.size>1) {
                     val next=if(event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) (index+1)%group.size else (index-1+group.size)%group.size
