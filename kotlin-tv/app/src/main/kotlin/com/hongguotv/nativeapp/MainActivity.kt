@@ -1724,7 +1724,7 @@ class MainActivity: Activity() {
                 val inNav=nav.any { it===current }
                 val base=all.filter { view -> nav.any { it===view } == inNav }
                 val loc=IntArray(2)
-                val group=if(screen=="catalog" && tab==1) base.toList() else base.sortedWith(compareBy(
+                val group=base.sortedWith(compareBy(
                     { view -> view.getLocationOnScreen(loc); loc[1] },
                     { view -> view.getLocationOnScreen(loc); loc[0] }))
                 val index=group.indexOfFirst { it===current }
