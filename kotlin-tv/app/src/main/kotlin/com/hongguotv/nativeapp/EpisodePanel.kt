@@ -14,7 +14,9 @@ import android.widget.*
 class EpisodePanel(
     private val activity: Activity,private val count: Int,private val current: Int,
     private val locate: (Int,View,(Int)->Unit)->Unit,
-    private val select: (Int)->Unit,private val closed: ()->Unit
+    private val select: (Int)->Unit,
+    private val otherSeasons: ()->Unit,
+    private val closed: ()->Unit
 ) {
     private val dialog=Dialog(activity)
     private val groupSize=100
@@ -44,10 +46,11 @@ class EpisodePanel(
         content.addView(label("选集  /  正在看第 ${current+1} 集",20f))
         val maxGroup=(count-1)/groupSize
         val actions=LinearLayout(activity)
+        val other=button("其他季") { dismiss(); otherSeasons() }
         lateinit var jump: TextView
         jump=button("跳转集数") { locate(focused,jump) { target -> focused=target; group=target/groupSize; render() } }
         val close=button("关闭") { dismiss() }
-        listOf(jump,close).forEach { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
+        listOf(other,jump,close).forEach { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
         content.addView(actions)
         val groupRow=LinearLayout(activity)
         val groupButtons=mutableListOf<TextView>()
@@ -81,13 +84,16 @@ class EpisodePanel(
             cell.nextFocusUpId=if(i>=5) cells[i-5].id else (groupButtons.firstOrNull()?.id ?: (if(close.isFocusable) close.id else jump.id))
             cell.nextFocusDownId=cells[if(i+5<cells.size) i+5 else if(i/5<cells.lastIndex/5) cells.lastIndex else i].id
         }
-        close.nextFocusLeftId=jump.id; close.nextFocusRightId=jump.id; jump.nextFocusLeftId=close.id; jump.nextFocusRightId=close.id
+        other.nextFocusLeftId=close.id; other.nextFocusRightId=jump.id
+        jump.nextFocusLeftId=other.id; jump.nextFocusRightId=close.id
+        close.nextFocusLeftId=jump.id; close.nextFocusRightId=other.id
+        other.nextFocusDownId=groupButtons.firstOrNull()?.id ?: cells.first().id
         jump.nextFocusDownId=groupButtons.firstOrNull()?.id ?: cells.first().id
         close.nextFocusDownId=groupButtons.firstOrNull()?.id ?: cells.first().id
         groupButtons.forEachIndexed { i,item ->
             item.nextFocusLeftId=groupButtons[if(i==0) groupButtons.lastIndex else i-1].id
             item.nextFocusRightId=groupButtons[if(i==groupButtons.lastIndex) 0 else i+1].id
-            item.nextFocusUpId=if(close.isFocusable) close.id else jump.id
+            item.nextFocusUpId=if(other.isFocusable) other.id else jump.id
             item.nextFocusDownId=cells.first().id
         }
         dialog.setContentView(content)

@@ -1098,17 +1098,43 @@ class MainActivity: Activity() {
             }
         })
     }
-    private fun openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true) {
+    private fun openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,fromStart: Boolean=false) {
         pendingDetail=series; detailAutoplay=autoplay
         invalidatePage(); releaseCatalogViews(); screen="detail"; directPlayback=resume; detail=null; synopsisExpanded=false
         val body=base(series.title); message(body,"正在加载剧集…")
         work({ repository.detail(series.id) }, { result ->
             detail=result; library.observeFavorite(series.id,result.episodes.size,System.currentTimeMillis(),acknowledge=true)
             val progress=library.progress(series.id)
-            val target=ResumePlayback.target(result.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
+            val target=if(fromStart) ResumePlayback.target(result.episodes,null,0,false) else ResumePlayback.target(result.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
             episodeIndex=target.index; group=episodeIndex/episodeGroupSize()
             if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else { prefetchEpisode(target.index); showDetail(false) }
-        }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay) } })
+        }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay,fromStart) } })
+    }
+    private fun baseTitle(title: String): String {
+        var t=title.trim()
+        t=t.replace(Regex("第[0-9一二三四五六七八九十百两零]+[季部]"),"").trim()
+        t=t.replace(Regex("[0-9]+$"),"").trim()
+        t=t.trimEnd('季','部',' ','　','·','-','—',':','：')
+        return t.ifBlank { title.trim() }
+    }
+    private fun findOtherSeasons(anchor: View?,play: Boolean) {
+        val data=detail ?: return
+        val current=data.series
+        val base=baseTitle(current.title)
+        work({
+            val out=LinkedHashMap<String,Series>()
+            for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
+                runCatching { repository.search(base,1,type) }.getOrNull()?.items?.forEach { out[it.id]=it }
+            }
+            out.values.filter { it.id!=current.id && (it.title.contains(base) || base.contains(it.title)) }.sortedBy { it.title }
+        }, { list ->
+            if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
+            val labels=list.map { "${it.title}  ·  ${it.badge.ifBlank { "查看剧集" }}" }
+            tvTools.choose("查找其他季（共 ${list.size}）",labels,anchor) { index ->
+                val picked=list[index]
+                main.post { if(play) openDetail(picked,resume=true,autoplay=true,fromStart=true) else openDetail(picked) }
+            }
+        }, { Toast.makeText(this,"查找失败，请稍后再试",Toast.LENGTH_LONG).show() })
     }
     private fun showSynopsis(title: String,body: String) {
         val view=TextView(this).apply { setText(body); textSize=15f; setTextColor(TvStyle.text); setPadding(dp(4),dp(4),dp(4),dp(4)) }
@@ -1176,6 +1202,9 @@ class MainActivity: Activity() {
         val gs=episodeGroupSize()
         val maxGroup=data.episodes.lastIndex/gs; group=group.coerceIn(0,maxGroup)
         val groupRow=row().apply { setPadding(0,dp(3),0,dp(5)) }
+        lateinit var seasonsBtn: TextView
+        seasonsBtn=button("其他季") { findOtherSeasons(seasonsBtn,false) }
+        groupRow.addView(seasonsBtn,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
         lateinit var jump: TextView
         jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
         groupRow.addView(jump,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
@@ -1594,9 +1623,11 @@ class MainActivity: Activity() {
         addButton(transport,"下一集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
         lateinit var episodes: TextView
         episodes=addButton(transport,"选集") { showEpisodePanel(episodes) }
+        lateinit var seasons: TextView
+        seasons=addButton(transport,"其他季") { findOtherSeasons(seasons,true) }
         lateinit var more: TextView
         more=addButton(transport,"播放设置") {
-            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放"),more,{ choice ->
+            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
                         0 -> showSpeedPicker(more)
@@ -1605,6 +1636,7 @@ class MainActivity: Activity() {
                         3 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
                         4 -> showSleepPicker(more)
                         5 -> { seekTo(0); hidePanel() }
+                        6 -> findOtherSeasons(more,true)
                     }
                 }
             })
@@ -1657,6 +1689,7 @@ class MainActivity: Activity() {
                 if(selected==episodeIndex) episodePanel?.dismiss()
                 else { resumeOnClose=false; episodePanel?.dismiss(); playEpisode(selected) }
             },
+            { findOtherSeasons(null,true) },
             {
                 episodePanel=null
                 if(resumeOnClose && foreground && generation==ticket && screen=="player") {
