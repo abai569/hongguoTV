@@ -1888,27 +1888,34 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
         pending.sortBy { it.time }
         invalidate()
     }
-    fun start() { started=true; lastPos=0; pending.clear(); active.clear(); seen.clear(); handler.post(tick) }
-    fun stop() { started=false; handler.removeCallbacks(tick) }
-    private val handler=android.os.Handler(android.os.Looper.getMainLooper())
-    private val tick=object: Runnable { override fun run() {
-        if(!started) return
-        postInvalidate()
-        handler.postDelayed(this,33)
-    }}
-    override fun onDraw(canvas: android.graphics.Canvas) {
-        super.onDraw(canvas)
+    private var lastNanos=0L
+    private var lastKnownPos=-1L
+    private val frameCallback=object: android.view.Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if(!started) return
+            val dtMs=if(lastNanos==0L) 0f else (frameTimeNanos-lastNanos)/1_000_000f
+            lastNanos=frameTimeNanos
+            advance(dtMs)
+            invalidate()
+            android.view.Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+    fun start() { started=true; lastNanos=0L; lastKnownPos=-1L; lastPos=0; pending.clear(); active.clear(); seen.clear(); android.view.Choreographer.getInstance().postFrameCallback(frameCallback) }
+    fun stop() { started=false; android.view.Choreographer.getInstance().removeFrameCallback(frameCallback) }
+    private fun advance(dtMs: Float) {
         val w=width.toFloat(); val h=height.toFloat()
         if(w<=0f || h<=0f) return
         val fm=paint.fontMetrics
         val lineHeight=(fm.descent-fm.ascent)*1.2f
         val top=h*0.04f
         val laneCount=Math.max(1,Math.min(10,((h*BAND)/lineHeight).toInt()))
-        // One speed for every danmaku on this screen, so a later one can never overtake an earlier one.
-        val speed=w/TRAVEL_FRAMES
+        // One speed (px/ms) for every danmaku, so a later one can never overtake an earlier one.
+        val speed=w/TRAVEL_MS
         fun baseline(lane: Int)=top-fm.ascent+lane*lineHeight
+        val currentPos=currentPosProvider?.invoke() ?: 0L
+        val playing=lastKnownPos<0L || currentPos!=lastKnownPos
+        lastKnownPos=currentPos
         if(pending.isNotEmpty()) {
-            val currentPos=currentPosProvider?.invoke() ?: 0L
             while(pending.isNotEmpty() && pending[0].time<=currentPos) {
                 val dm=pending.removeAt(0)
                 val textW=paint.measureText(dm.text)
@@ -1924,14 +1931,20 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             }
             lastPos=currentPos
         }
-        val it=active.iterator()
-        while(it.hasNext()) {
-            val dm=it.next()
-            dm.x-=dm.speed
-            if(dm.x+dm.width<0) { it.remove(); continue }
-            canvas.drawText(dm.text,dm.x,dm.y,paint)
+        if(playing) {
+            val dt=dtMs.coerceIn(0f,100f)
+            val it=active.iterator()
+            while(it.hasNext()) {
+                val dm=it.next()
+                dm.x-=dm.speed*dt
+                if(dm.x+dm.width<0) it.remove()
+            }
         }
     }
-    private companion object { const val BAND=0.30f; const val TRAVEL_FRAMES=260f }
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        super.onDraw(canvas)
+        for(dm in active) canvas.drawText(dm.text,dm.x,dm.y,paint)
+    }
+    private companion object { const val BAND=0.30f; const val TRAVEL_MS=8600f }
     var currentPosProvider: (()->Long)?=null
 }
