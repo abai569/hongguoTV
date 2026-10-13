@@ -1142,10 +1142,11 @@ class MainActivity: Activity() {
         val curSeason=seasonNumber(current.title)
         work({
             val out=LinkedHashMap<String,Series>()
-            for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
+            val keywords=listOf(current.title,base).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            for(kw in keywords) for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
                 var page=1
                 while(page<=3) {
-                    val r=runCatching { repository.search(base,page,type) }.getOrNull() ?: break
+                    val r=runCatching { repository.search(kw,page,type) }.getOrNull() ?: break
                     r.items.forEach { out[it.id]=it }
                     if(!r.hasMore) break
                     page++
