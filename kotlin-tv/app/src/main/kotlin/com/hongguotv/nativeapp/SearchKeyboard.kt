@@ -21,9 +21,14 @@ class SearchKeyboard(
     val clearKeyId: Int get()=rows.getOrNull(0)?.getOrNull(1)?.id ?: View.NO_ID
 
     private fun dpi(value: Int)=(value*resources.displayMetrics.density).toInt()
+    private val cols=6
+    private val gapX=dpi(6)
+    private val gapY=dpi(3)
+    private var keySize=dpi(42)
+    private fun keyTextFor(size: Int)=((size/resources.displayMetrics.density)*0.45f).coerceIn(9f,17f)
 
     private fun keyRow(): LinearLayout {
-        val row=LinearLayout(context).apply { orientation=HORIZONTAL }
+        val row=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_HORIZONTAL }
         addView(row,LayoutParams(-1,-2))
         rows.add(mutableListOf())
         return row
@@ -31,13 +36,13 @@ class SearchKeyboard(
     private fun addKey(row: LinearLayout,label: String,weight: Float=1f,action: ()->Unit) {
         val view=TextView(context).apply {
             id=View.generateViewId(); text=label; gravity=Gravity.CENTER
-            setTextColor(TvStyle.text); textSize=17f; includeFontPadding=false
+            setTextColor(TvStyle.text); textSize=keyTextFor(keySize); includeFontPadding=false
             background=TvStyle.shape(context,TvStyle.surface,Color.TRANSPARENT,8)
             isFocusable=true; isFocusableInTouchMode=context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
             setOnFocusChangeListener { _,focused -> background=TvStyle.shape(context,if(focused) TvStyle.raised else TvStyle.surface,if(focused) TvStyle.accent else Color.TRANSPARENT,8) }
             setOnClickListener { action() }
         }
-        row.addView(view,LayoutParams(0,dpi(42),weight).apply { marginEnd=dpi(6); topMargin=dpi(3) })
+        row.addView(view,LayoutParams(keySize,keySize).apply { marginEnd=gapX; topMargin=gapY })
         rows.last().add(view)
     }
     private fun char(value: Char) {
@@ -48,6 +53,19 @@ class SearchKeyboard(
     fun value(): String = text
     fun focusFirst() { post { rows.firstOrNull()?.firstOrNull()?.requestFocus() } }
     fun linkRight(targetId: Int) { if(targetId==View.NO_ID) return; rows.forEach { it.lastOrNull()?.nextFocusRightId=targetId } }
+    override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
+        val availW=MeasureSpec.getSize(widthMeasureSpec)-paddingLeft-paddingRight
+        val availH=MeasureSpec.getSize(heightMeasureSpec)-paddingTop-paddingBottom
+        val rowN=childCount.coerceAtLeast(1)
+        val byW=(availW-gapX*(cols-1))/cols
+        val byH=(availH-gapY*rowN)/rowN
+        val size=minOf(byW,byH).coerceIn(dpi(16),dpi(64))
+        if(size!=keySize) {
+            keySize=size; val ts=keyTextFor(size)
+            rows.forEach { r -> r.forEach { k -> k.layoutParams=LayoutParams(size,size).apply { marginEnd=gapX; topMargin=gapY }; k.textSize=ts } }
+        }
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),rowN*(keySize+gapY))
+    }
 
     init {
         orientation=VERTICAL

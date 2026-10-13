@@ -296,7 +296,7 @@ class MainActivity: Activity() {
     private var historyFlow: View?=null
     private fun renderSuggestions(titles: List<String>) {
         val host=recommendHost ?: return
-        if(suggestDraft.isBlank()) { recommendTitle?.text="热门推荐"; historyTitle?.visibility=View.VISIBLE; historyFlow?.visibility=View.VISIBLE; fillRecommend(host,hotKeywords,"暂无推荐") }
+        if(suggestDraft.isBlank()) { recommendTitle?.text="热搜"; historyTitle?.visibility=View.VISIBLE; historyFlow?.visibility=View.VISIBLE; fillRecommend(host,hotKeywords,"暂无推荐") }
         else { recommendTitle?.text="建议"; historyTitle?.visibility=View.GONE; historyFlow?.visibility=View.GONE; fillRecommend(host,titles,"暂无建议") }
     }
     override fun onCreate(state: Bundle?) {
@@ -550,30 +550,33 @@ class MainActivity: Activity() {
             })
             input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
             val history=library.searches()
-            historyTitle=text("历史",if(phone) 17f else 22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
-            recommendTitle=text("热门推荐",if(phone) 17f else 22f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),dp(16),0,dp(8)) }
+            historyTitle=text("历史",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
+            recommendTitle=text("热搜",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),if(phone) dp(16) else 0,0,dp(8)) }
             val host=column(); recommendHost=host
-            val panel=column()
-            panel.addView(historyTitle)
-            historyFlow=if(history.isEmpty()) { panel.addView(text("暂无搜索历史",13f,muted)); null } else addChips(panel,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard?.setText(it.query); runSearch(it.query,it.type) } })
-            panel.addView(recommendTitle)
-            panel.addView(host)
+            val historyCol=column()
+            historyCol.addView(historyTitle)
+            historyFlow=if(history.isEmpty()) { historyCol.addView(text("暂无搜索历史",13f,muted)); null } else addChips(historyCol,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard?.setText(it.query); runSearch(it.query,it.type) } })
+            val suggestCol=column()
+            suggestCol.addView(recommendTitle)
+            suggestCol.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")
             if(phone) {
                 val scroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
                 val body2=column(); scroll.addView(body2); container.addView(scroll,lp(-1,0).apply { weight=1f })
                 body2.addView(keywordRow,lp(-1,-2))
-                body2.addView(panel,lp(-1,-2))
+                body2.addView(historyCol,lp(-1,-2))
+                body2.addView(suggestCol,lp(-1,-2))
                 searchPanelShown=true
             } else {
-                container.addView(keywordRow,lp(-1,-2))
-                val left=column(); keyboard?.let { left.addView(it) }
-                val area=row(); area.addView(left,lp(0,-1).apply { weight=0.8f; rightMargin=dp(24) })
+                val area=row()
+                area.addView(historyCol,lp(0,-1).apply { weight=0.2f; rightMargin=dp(20) })
+                val midCol=column(); midCol.addView(keywordRow); keyboard?.let { midCol.addView(it,lp(-1,-2)) }
+                area.addView(midCol,lp(0,-1).apply { weight=0.38f; rightMargin=dp(20) })
                 val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
-                rightScroll.addView(panel); area.addView(rightScroll,lp(0,-1).apply { weight=1f })
+                rightScroll.addView(suggestCol); area.addView(rightScroll,lp(0,-1).apply { weight=0.42f })
                 container.addView(area,lp(-1,0).apply { weight=1f })
                 keyboard?.setText(searchDraft)
-                val rightTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: (host.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
+                val rightTarget=host.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
                 nav.forEach { it.nextFocusDownId=input.id }
