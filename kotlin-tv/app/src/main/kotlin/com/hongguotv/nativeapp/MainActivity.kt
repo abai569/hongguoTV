@@ -1117,16 +1117,51 @@ class MainActivity: Activity() {
         t=t.trimEnd('季','部',' ','　','·','-','—',':','：')
         return t.ifBlank { title.trim() }
     }
+    private fun normTitle(value: String)=value.replace(Regex("[\\s·:：、,.。\\-—()（）\\[\\]【】!！?？\"'“”‘’]"),"").lowercase()
+    private fun cnNumber(s: String): Int {
+        if(s.all { it.isDigit() }) return s.toIntOrNull() ?: 0
+        val map=mapOf('零' to 0,'一' to 1,'二' to 2,'两' to 2,'三' to 3,'四' to 4,'五' to 5,'六' to 6,'七' to 7,'八' to 8,'九' to 9)
+        var total=0; var number=0
+        for(c in s) when {
+            c=='百' -> { total+=(if(number==0) 1 else number)*100; number=0 }
+            c=='十' -> { total+=(if(number==0) 1 else number)*10; number=0 }
+            map.containsKey(c) -> number=map.getValue(c)
+            else -> {}
+        }
+        return total+number
+    }
+    private fun seasonNumber(title: String): Int {
+        val m=Regex("第([0-9一二三四五六七八九十百两零]+)[季部]").find(title) ?: return 0
+        return cnNumber(m.groupValues[1])
+    }
     private fun findOtherSeasons(anchor: View?,play: Boolean) {
         val data=detail ?: return
         val current=data.series
         val base=baseTitle(current.title)
+        val nb=normTitle(base)
+        val curSeason=seasonNumber(current.title)
         work({
             val out=LinkedHashMap<String,Series>()
             for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
-                runCatching { repository.search(base,1,type) }.getOrNull()?.items?.forEach { out[it.id]=it }
+                var page=1
+                while(page<=3) {
+                    val r=runCatching { repository.search(base,page,type) }.getOrNull() ?: break
+                    r.items.forEach { out[it.id]=it }
+                    if(!r.hasMore) break
+                    page++
+                }
             }
-            out.values.filter { it.id!=current.id && (it.title.contains(base) || base.contains(it.title)) }.sortedBy { it.title }
+            val seen=mutableSetOf<String>()
+            val picked=mutableListOf<Series>()
+            out.values
+                .filter { it.id!=current.id && normTitle(it.title).contains(nb) }
+                .forEach { s ->
+                    val sn=seasonNumber(s.title)
+                    if(curSeason>0 && sn==curSeason) return@forEach
+                    val key=if(sn>0) "S$sn" else "T"+normTitle(s.title)
+                    if(seen.add(key)) picked.add(s)
+                }
+            picked.sortedWith(compareBy({ seasonNumber(it.title).let { n -> if(n>0) n else Int.MAX_VALUE } },{ it.title }))
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
             val labels=list.map { "${it.title}  ·  ${it.badge.ifBlank { "查看剧集" }}" }
