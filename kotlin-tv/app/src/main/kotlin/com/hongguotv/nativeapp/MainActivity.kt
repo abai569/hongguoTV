@@ -1130,10 +1130,10 @@ class MainActivity: Activity() {
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
             val labels=list.map { "${it.title}  ·  ${it.badge.ifBlank { "查看剧集" }}" }
-            tvTools.choose("查找其他季（共 ${list.size}）",labels,anchor) { index ->
+            tvTools.choose("查找其他季（共 ${list.size}）",labels,anchor,{ index ->
                 val picked=list[index]
                 main.post { if(play) openDetail(picked,resume=true,autoplay=true,fromStart=true) else openDetail(picked) }
-            }
+            })
         }, { Toast.makeText(this,"查找失败，请稍后再试",Toast.LENGTH_LONG).show() })
     }
     private fun showSynopsis(title: String,body: String) {
