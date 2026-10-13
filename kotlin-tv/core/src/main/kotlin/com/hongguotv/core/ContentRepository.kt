@@ -62,9 +62,9 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         // The website rank page alternates between an inline payload and a lazy placeholder with no
         // list; retry a few times so a cache-miss response does not blank the board or the home sections.
         var last: Exception? = null
-        for(attempt in 1..5) {
-            try { return ComicRank.parse(text("$site/rank/${type.slug}?page=$page"),page,type) }
-            catch(e: Exception) { last=e; if(attempt<5) runCatching { Thread.sleep(200L*attempt) } }
+        for(attempt in 1..4) {
+            try { return ComicRank.parse(text("$site/rank/${type.slug}?page=$page"),page,type,allowRendered=(attempt==4)) }
+            catch(e: Exception) { last=e; if(attempt<4) runCatching { Thread.sleep(200L*attempt) } }
         }
         throw (last as? IOException) ?: IOException("${type.label}榜单暂不可用")
     }

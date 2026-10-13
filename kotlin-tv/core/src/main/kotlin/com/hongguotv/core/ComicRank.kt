@@ -9,7 +9,7 @@ import java.io.IOException
 
 /** Read the website's serialized data only; never execute its scripts. */
 internal object ComicRank {
-    fun parse(html: String, page: Int, type: RankType = RankType.COMIC): CatalogPage {
+    fun parse(html: String, page: Int, type: RankType = RankType.COMIC, allowRendered: Boolean = false): CatalogPage {
         try {
             val document=Jsoup.parse(html)
             val updatedText=runCatching { ContentRepository.extractRouter(html).optJSONObject("loaderData")
@@ -47,6 +47,7 @@ internal object ComicRank {
                 return CatalogPage(items,items.isNotEmpty() && page<minOf(totalPages,100),
                     ComicRanking(positions.filterKeys { id -> items.any { it.id==id } },minOf(totalPages,100),updatedText))
             }
+            if(!allowRendered) throw IOException("${type.label}榜单数据未就绪")
             return renderedPage(document,html,page,type)
         } catch(e: IOException) { throw e } catch(e: Exception) { throw IOException("${type.label}榜单格式已变化",e) }
     }

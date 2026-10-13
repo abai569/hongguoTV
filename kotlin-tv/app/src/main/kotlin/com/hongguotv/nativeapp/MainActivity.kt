@@ -822,6 +822,8 @@ class MainActivity: Activity() {
             { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it })
         homeScreen=board; body.addView(board,lp(-1,0).apply { weight=1f })
         board.render(rankShelves(true),catalogFocus,!focusNav && !focusType,null,null)
+        board.refresh.text="刷新榜单"
+        board.refresh.setOnClickListener { showCatalog(true) }
         rankRefresh?.nextFocusDownId=board.firstId()
         nav.forEach { it.nextFocusDownId=board.firstId() }
         val updated=homeRank.firstOrNull()?.second?.ranking?.updatedText
