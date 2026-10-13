@@ -92,8 +92,6 @@ class MainActivity: Activity() {
     private var sleepStopped=false
     private var playerView: PlayerView?=null
     private var danmakuView: DanmakuView?=null
-    private var danmakuNextOffset=0L
-    private var danmakuFetchRunnable: Runnable?=null
     private var lastTapTime=0L
     private var pauseIcon: android.widget.ImageView?=null
     private var pauseIconRunnable=Runnable {}
@@ -1356,24 +1354,9 @@ class MainActivity: Activity() {
             video=remote; quality=remote.info.quality
             if(library.danmakuEnabled) {
                 danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
-                val dur=remote.info.durationMs
-                danmakuNextOffset=(startPosition/15000L)*15000L
-                danmakuFetchRunnable?.let { main.removeCallbacks(it) }
-                danmakuFetchRunnable=object: Runnable {
-                    override fun run() {
-                        val p=player ?: return
-                        val pos=p.currentPosition
-                        if(danmakuNextOffset<dur && pos>danmakuNextOffset-30000) {
-                            val off=danmakuNextOffset
-                            danmakuNextOffset+=15000
-                            work({ repository.fetchDanmakuWindow(remote.info.episodeId,off,dur) }, { arr ->
-                                if(arr.length()>0) danmakuView?.appendData(arr)
-                            }, {})
-                        }
-                        if(danmakuNextOffset<dur) main.postDelayed(this,5000)
-                    }
-                }
-                main.postDelayed(danmakuFetchRunnable!!,300)
+                work({ repository.fetchDanmakuWindow(remote.info.episodeId,0,remote.info.durationMs) }, { arr ->
+                    if(arr.length()>0) danmakuView?.appendData(arr)
+                }, {})
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
@@ -1865,6 +1848,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     data class Dm(val time: Long, val text: String, var x: Float=0f, var y: Float=0f, var width: Float=0f, var lane: Int=0, var speed: Float=0f)
     private val pending=mutableListOf<Dm>()
     private val active=mutableListOf<Dm>()
+    private val seen=mutableSetOf<String>()
     private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=42f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
     private var lastPos=0L; private var started=false
     fun setData(raw: org.json.JSONArray) {
@@ -1897,12 +1881,14 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",0L))
+            val key=commentObj.optString("comment_id").ifEmpty { "$timeMs|$processed" }
+            if(!seen.add(key)) continue
             pending.add(Dm(timeMs,processed))
         }
         pending.sortBy { it.time }
         invalidate()
     }
-    fun start() { started=true; lastPos=0; handler.post(tick) }
+    fun start() { started=true; lastPos=0; pending.clear(); active.clear(); seen.clear(); handler.post(tick) }
     fun stop() { started=false; handler.removeCallbacks(tick) }
     private val handler=android.os.Handler(android.os.Looper.getMainLooper())
     private val tick=object: Runnable { override fun run() {
