@@ -181,36 +181,70 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
-        val payload="""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",VendorConstants.device,payload)
+        val biz="""{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024}"""
+        val body="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
+        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",VendorConstants.device,body)
         val data=JSONObject(text(signed.url,signed))
         if(data.optInt("Code",data.optInt("code",0))!=0) throw IOException("播放接口暂不可用")
         val map=data.optJSONObject("data") ?: throw IOException("播放信息为空")
         val entry=map.optJSONObject(id) ?: map.keys().asSequence().mapNotNull { map.optJSONObject(it) }.firstOrNull() ?: throw IOException("播放信息为空")
         val model=entry.optJSONObject("video_model") ?: JSONObject(entry.str("video_model"))
+        val durationMs=(model.optDouble("video_duration",0.0)*1000).toLong()
+        // Prefer a codec Android can decode. Skip ByteVC2 (bvc2) which has no platform decoder; the
+        // 1080p variant is ByteVC1, a standard HEVC (hvc1) stream that hardware decoders handle.
+        val list=model.optJSONArray("video_list")
+        if(list!=null && list.length()>0) {
+            val rows=list.objects().mapNotNull { o ->
+                val meta=o.optJSONObject("video_meta") ?: JSONObject()
+                if(o.str("main_url").isEmpty() || meta.str("codec_type").lowercase() in setOf("bytevc2","bvc2")) null
+                else Triple(qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") }),o,meta)
+            }.sortedByDescending { it.first }.toList()
+            val chosen=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
+            if(chosen!=null) {
+                val item=chosen.second; val url=cleanUrl(item.str("main_url"))
+                if(url.startsWith("https://") || url.startsWith("http://")) {
+                    val key=item.optJSONObject("encrypt_info")?.str("spade_a")?.takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
+                    val quality=if(chosen.first>0) "${chosen.first}P"+(if(chosen.first>maxQuality) "（兼容资源）" else "") else "自动"
+                    val result=StreamInfo(url,key,quality)
+                    result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
+                    return result
+                }
+            }
+        }
+        // Legacy fallback_api mirror.
         val raw=model.opt("fallback_api")
         val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
-        if(!fallback.startsWith("https://")) throw IOException("播放地址格式异常")
-        val info=JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") ?: throw IOException("没有播放资源")
-        val videoList=info.optJSONObject("video_list") ?: throw IOException("没有可用清晰度")
-        // ByteVC2 resources can expose playable audio but no video track in Android's MP4 extractor.
-        // Keep missing legacy codec labels usable, but never select a known incompatible variant.
-        val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
-            it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2")
-        }.map { (k,o) -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) }.sortedByDescending { it.first }.toList()
-        val selected=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull() ?: throw IOException("没有电视可播放的清晰度，请稍后再试或选择其他剧集")
-        val item=selected.third; var url=cleanUrl(item.str("main_url")); val seed=info.str("key_seed")
-        if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
-        if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
-        val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-        val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        val durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
-        val result=StreamInfo(url,key,quality)
-        result.debugRaw=info.toString()
-        result.danmakuRaw=JSONArray()
-        result.episodeId=id
-        result.durationMs=durationMs
-        return result
+        if(fallback.startsWith("https://")) {
+            val info=runCatching { JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") }.getOrNull()
+            val videoList=info?.optJSONObject("video_list")
+            if(videoList!=null) {
+                val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
+                    it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2")
+                }.map { (k,o) -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) }.sortedByDescending { it.first }.toList()
+                val selected=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
+                if(selected!=null) {
+                    val item=selected.third; var url=cleanUrl(item.str("main_url")); val seed=info.str("key_seed")
+                    if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
+                    if(url.startsWith("https://") || url.startsWith("http://")) {
+                        val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
+                        val quality=if(selected.first>0) "${selected.first}P" else "自动"
+                        val result=StreamInfo(url,key,quality)
+                        result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
+                        result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
+                        return result
+                    }
+                }
+            }
+        }
+        // Website public MP4 (plain H.264, low resolution) as a last resort.
+        val publicUrl="https://hongguoduanju.com/video/public/$id/360p.mp4"
+        val ok=runCatching { RequestScope.execute(http.newCall(Request.Builder().url(publicUrl).header("Range","bytes=0-1").header("User-Agent",VendorConstants.VIDEO_UA).build())) { it.isSuccessful } }.getOrDefault(false)
+        if(ok) {
+            val result=StreamInfo(publicUrl,null,"360P")
+            result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
+            return result
+        }
+        throw IOException("没有可播放的清晰度，请稍后再试")
     }
     fun fetchDanmakuWindow(episodeId: String, offset: Long, durationMs: Long): JSONArray {
         val result=JSONArray()
