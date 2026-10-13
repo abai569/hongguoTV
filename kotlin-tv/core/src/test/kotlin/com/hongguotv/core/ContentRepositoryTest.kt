@@ -32,9 +32,9 @@ class ContentRepositoryTest {
         assertEquals("480P",repo.stream("123",720).quality)
     }
 
-    @Test fun entirelyIncompatibleSourceFailsBeforeStartingAudio() {
+    @Test fun entirelyIncompatibleSourcesFallBackToWebsiteMp4() {
         val repo=streamRepository(Triple(720,"ByteVC2","https://example.com/unsupported"),Triple(480,"bvc2","https://example.com/unsupported2"))
-        assertThrows(IOException::class.java) { repo.stream("123",720) }
+        assertEquals("https://hongguoduanju.com/video/public/123/360p.mp4",repo.stream("123",720).url)
     }
 
     @Test fun legacyMissingCodecLabelKeepsQualityLimit() {

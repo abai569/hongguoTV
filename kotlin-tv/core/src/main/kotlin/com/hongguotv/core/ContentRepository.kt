@@ -227,7 +227,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
                     if(url.startsWith("https://") || url.startsWith("http://")) {
                         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-                        val quality=if(selected.first>0) "${selected.first}P" else "自动"
+                        val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
                         val result=StreamInfo(url,key,quality)
                         result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
                         result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
