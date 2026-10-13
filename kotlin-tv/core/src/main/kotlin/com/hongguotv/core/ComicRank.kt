@@ -68,7 +68,7 @@ internal object ComicRank {
                 article.selectFirst("p[class*=metrics-]")?.text().orEmpty())
             Series(id,title,article.selectFirst("img[src]")?.attr("src").orEmpty(),
                 article.selectFirst("p[class*=description-]")?.text().orEmpty(),
-                article.selectFirst("p[class*=metrics-]")?.text().orEmpty(),
+                "",
                 article.select("p[class*=categories-] > span").take(5).joinToString(" · ") { it.text() })
         }.distinctBy { it.id }
         if(items.isEmpty()) throw IOException("页面没有${type.label}榜单数据")

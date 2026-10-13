@@ -55,6 +55,9 @@ class MainActivity: Activity() {
     private var libraryLoadError: Throwable?=null
     private var workScope: RequestScope?=null
     private var workJob: java.util.concurrent.Future<*>?=null
+    private var countScope: RequestScope?=null
+    private var countJob: java.util.concurrent.Future<*>?=null
+    private val countBadgePattern=Regex("全\\s*\\d+\\s*集")
     private var playerListener: Player.Listener?=null
     private lateinit var playbackTitle: TextView
     private var directPlayback=false
@@ -269,7 +272,7 @@ class MainActivity: Activity() {
         val flow=FlowLayout(context,dp(8),dp(8))
         pills.forEach { (label,action) ->
             val chip=TextView(context).apply {
-                text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
+                id=View.generateViewId(); text=label; textSize=if(small) 14f else 18f; gravity=Gravity.CENTER; maxLines=2
                 setTextColor(TvStyle.text); setPadding(dp(if(small) 12 else 16),dp(if(small) 8 else 12),dp(if(small) 12 else 16),dp(if(small) 8 else 12))
                 isFocusable=true; if(isTvDevice) isFocusableInTouchMode=true
                 background=TvStyle.focusBackground(context)
@@ -345,6 +348,8 @@ class MainActivity: Activity() {
         deferredWork?.discard?.invoke(); deferredWork=null
         workScope?.cancel(); workScope=null
         workJob?.cancel(true); workJob=null
+        countScope?.cancel(); countScope=null
+        countJob?.cancel(true); countJob=null
         (io as? java.util.concurrent.ThreadPoolExecutor)?.purge()
     }
     private fun invalidatePage() {
@@ -625,8 +630,12 @@ class MainActivity: Activity() {
             }
             if(collection==null && requestPage==1 && (requestTab==0 || requestTab==2)) {
                 work({ repository.homeCategories() }, { sections ->
-                    homeRank=sections; homeFromCache=false
-                    sections.forEach { (type,pageData) -> library.cacheRank(type,pageData.items,pageData.hasMore) }
+                    val merged=sections.map { (type,pageData) ->
+                        val cached=library.cachedRank(type)?.items?.associateBy { it.id }
+                        type to pageData.copy(items=pageData.items.map { item -> if(isCountBadge(item.badge)) item else cached?.get(item.id)?.takeIf { isCountBadge(it.badge) }?.let { item.copy(badge=it.badge) } ?: item })
+                    }
+                    homeRank=merged; homeFromCache=false
+                    merged.forEach { (type,pageData) -> library.cacheRank(type,pageData.items,pageData.hasMore) }
                     val home=homeScreen
                     if(home!=null && screen=="catalog") {
                         home.updateShelves(if(requestTab==2) rankShelves(true) else homeShelves(),requestFocus=false)
@@ -635,6 +644,7 @@ class MainActivity: Activity() {
                         val keepNav=nav.any { it.hasFocus() }; val keepType=typeButtons.values.any { it.hasFocus() }
                         body.removeAllViews(); catalogGrid(body,keepNav,keepType)
                     }
+                    enrichRankCounts()
                 }, { problem ->
                     if(homeFromCache) {
                         homeScreen?.refresh?.text="当前显示上次内容 · 联网后按确认刷新"
@@ -831,12 +841,35 @@ class MainActivity: Activity() {
         if(loading) rankSubtitle?.text="正在读取最新榜单…"
         if(focusNav) nav[2].requestFocus()
     }
+    private fun isCountBadge(badge: String)=countBadgePattern.containsMatchIn(badge)
+    private fun enrichRankCounts() {
+        countJob?.cancel(true)
+        val ticket=generation
+        val scope=RequestScope(); countScope=scope
+        val targets=mutableListOf<Pair<RankType,Series>>()
+        homeRank.forEach { (type,pd) -> pd.items.forEach { item -> if(!isCountBadge(item.badge)) targets.add(type to item) } }
+        if(targets.isEmpty()) return
+        countJob=io.submit {
+            for((type,item) in targets) {
+                if(countScope!==scope || generation!=ticket) break
+                val count=runCatching { scope.run { repository.detail(item.id).episodes.size } }.getOrNull() ?: 0
+                if(count<=0) continue
+                main.post {
+                    if(isDestroyed || generation!=ticket || screen!="catalog") return@post
+                    val badge="全 $count 集"
+                    homeRank=homeRank.map { (t,pd) -> if(t==type) (t to pd.copy(items=pd.items.map { if(it.id==item.id) it.copy(badge=badge) else it })) else (t to pd) }
+                    val updated=homeRank.firstOrNull { it.first==type }?.second
+                    if(updated!=null) library.cacheRank(type,updated.items,updated.hasMore)
+                    homeScreen?.updateEntry("rank:${type.name}",HomeScreen.Entry(item.copy(badge=badge),badge))
+                }
+            }
+        }
+    }
     private fun rankShelves(ranked: Boolean): List<HomeScreen.Shelf> = homeRank.mapNotNull { (type,pageData) ->
         val positions=pageData.ranking?.positions
         val entries=pageData.items.filterNot { it.id in library.hidden() }.take(11).map { item ->
             val position=positions?.get(item.id)
-            val label=if(ranked) position?.heat?.takeIf { it.isNotBlank() } ?: item.badge.ifBlank { "查看剧集" }
-                else item.badge.ifBlank { "查看剧集" }
+            val label=if(isCountBadge(item.badge)) item.badge else position?.heat?.takeIf { it.isNotBlank() } ?: item.badge.ifBlank { "查看剧集" }
             HomeScreen.Entry(item,label,rank=position?.rank)
         }
         val cw=homeCardWidth()
