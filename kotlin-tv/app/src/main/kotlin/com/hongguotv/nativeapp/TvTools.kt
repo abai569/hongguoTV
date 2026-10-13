@@ -56,8 +56,8 @@ class TvTools(private val activity: Activity) {
         val next=builder.create(); open(next,anchor); next.listView.requestFocus()
     }
     fun episodePicker(count: Int,current: Int,anchor: View?,select: (Int)->Unit) {
-        val content=column(); var digits=(current+1).toString(); var replace=true
-        val value=label(digits,28f).apply { gravity=Gravity.CENTER }; content.addView(value)
+        val content=column(); var digits=""; var replace=true
+        val value=label("—",28f).apply { gravity=Gravity.CENTER }; content.addView(value)
         val error=label("定位到该集，再按确认播放",14f); content.addView(error)
         fun digit(key: String) { digits=if(replace) key else (digits+key).take(6); replace=false; value.text=digits; error.text="定位到该集，再按确认播放" }
         fun erase() { digits=if(replace) "" else digits.dropLast(1); replace=false; value.text=digits.ifEmpty { "—" } }

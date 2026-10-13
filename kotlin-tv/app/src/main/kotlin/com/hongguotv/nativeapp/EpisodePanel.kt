@@ -17,7 +17,8 @@ class EpisodePanel(
     private val select: (Int)->Unit,private val closed: ()->Unit
 ) {
     private val dialog=Dialog(activity)
-    private var group=current/20
+    private val groupSize=100
+    private var group=current/groupSize
     private var focused=current
     private fun dp(n: Int)=(n*activity.resources.displayMetrics.density).toInt()
     private fun label(value: String,size: Float=17f)=TextView(activity).apply { text=value; textSize=size; setTextColor(TvStyle.text); setPadding(dp(8),dp(6),dp(8),dp(6)) }
@@ -41,22 +42,29 @@ class EpisodePanel(
     private fun render() {
         val content=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(14),dp(12),dp(14),dp(12)); setBackgroundColor(TvStyle.background) }
         content.addView(label("选集  /  正在看第 ${current+1} 集",20f))
+        val maxGroup=(count-1)/groupSize
         val actions=LinearLayout(activity)
-        val close=button("关闭") { dismiss() }
         lateinit var jump: TextView
-        jump=button("跳转集数") { locate(focused,jump) { target -> focused=target; group=target/20; render() } }
-        listOf(close,jump).forEach { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
+        jump=button("跳转集数") { locate(focused,jump) { target -> focused=target; group=target/groupSize; render() } }
+        val close=button("关闭") { dismiss() }
+        listOf(jump,close).forEach { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
         content.addView(actions)
-        val paging=LinearLayout(activity)
-        val previous=button("‹ 上一组") { group--; focused=group*20; render() }.apply { isEnabled=group>0; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
-        val next=button("下一组 ›") { group++; focused=group*20; render() }.apply { isEnabled=(group+1)*20<count; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
-        listOf(previous,next).forEach { paging.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
-        content.addView(paging)
-        content.addView(label("第 ${group*20+1}—${minOf((group+1)*20,count)} 集 / 共 $count 集",14f))
+        val groupRow=LinearLayout(activity)
+        val groupButtons=mutableListOf<TextView>()
+        for(g in 0..maxGroup) {
+            val start=g*groupSize+1; val end=minOf((g+1)*groupSize,count)
+            val item=button("$start-$end",g==group) { group=g; focused=g*groupSize; render() }
+            groupButtons+=item
+            groupRow.addView(item,LinearLayout.LayoutParams(-2,-2).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) })
+        }
+        val groupScroll=HorizontalScrollView(activity).apply { isHorizontalScrollBarEnabled=false }
+        groupScroll.addView(groupRow)
+        content.addView(groupScroll,LinearLayout.LayoutParams(-1,-2))
+        content.addView(label("第 ${group*groupSize+1}—${minOf((group+1)*groupSize,count)} 集 / 共 $count 集",14f))
         val scroll=ScrollView(activity); val grid=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(grid)
         content.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         val cells=mutableListOf<TextView>()
-        (group*20 until minOf((group+1)*20,count)).toList().chunked(5).forEach { indexes ->
+        (group*groupSize until minOf((group+1)*groupSize,count)).toList().chunked(5).forEach { indexes ->
             val row=LinearLayout(activity)
             indexes.forEach { index ->
                 val cell=button("${index+1}",index==current) { select(index) }
@@ -70,15 +78,19 @@ class EpisodePanel(
             val rowStart=i/5*5; val rowEnd=minOf(rowStart+4,cells.lastIndex)
             cell.nextFocusLeftId=cells[if(i==rowStart) rowEnd else i-1].id
             cell.nextFocusRightId=cells[if(i==rowEnd) rowStart else i+1].id
-            cell.nextFocusUpId=if(i>=5) cells[i-5].id else if(i<3 && previous.isFocusable) previous.id else if(next.isFocusable) next.id else jump.id
+            cell.nextFocusUpId=if(i>=5) cells[i-5].id else (groupButtons.firstOrNull()?.id ?: (if(close.isFocusable) close.id else jump.id))
             cell.nextFocusDownId=cells[if(i+5<cells.size) i+5 else if(i/5<cells.lastIndex/5) cells.lastIndex else i].id
         }
-        previous.nextFocusUpId=close.id; next.nextFocusUpId=jump.id
-        previous.nextFocusDownId=cells.first().id; next.nextFocusDownId=cells[minOf(4,cells.lastIndex)].id
-        close.nextFocusDownId=if(previous.isFocusable) previous.id else cells.first().id
-        jump.nextFocusDownId=if(next.isFocusable) next.id else cells[minOf(4,cells.lastIndex)].id
         close.nextFocusLeftId=jump.id; close.nextFocusRightId=jump.id; jump.nextFocusLeftId=close.id; jump.nextFocusRightId=close.id
+        jump.nextFocusDownId=groupButtons.firstOrNull()?.id ?: cells.first().id
+        close.nextFocusDownId=groupButtons.firstOrNull()?.id ?: cells.first().id
+        groupButtons.forEachIndexed { i,item ->
+            item.nextFocusLeftId=groupButtons[if(i==0) groupButtons.lastIndex else i-1].id
+            item.nextFocusRightId=groupButtons[if(i==groupButtons.lastIndex) 0 else i+1].id
+            item.nextFocusUpId=if(close.isFocusable) close.id else jump.id
+            item.nextFocusDownId=cells.first().id
+        }
         dialog.setContentView(content)
-        cells[(focused-group*20).coerceIn(0,cells.lastIndex)].requestFocus()
+        cells[(focused-group*groupSize).coerceIn(0,cells.lastIndex)].requestFocus()
     }
 }

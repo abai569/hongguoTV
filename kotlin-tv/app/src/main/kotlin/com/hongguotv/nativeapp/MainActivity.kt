@@ -232,7 +232,7 @@ class MainActivity: Activity() {
     private fun widthDp()=resources.displayMetrics.widthPixels/resources.displayMetrics.density
     private fun columns()=if(BuildConfig.CHANNEL=="phone") 3 else 6
     private fun homeCardWidth()=if(BuildConfig.CHANNEL=="phone") (resources.displayMetrics.widthPixels*0.3f).toInt() else 0
-    private fun episodeGroupSize()=40
+    private fun episodeGroupSize()=100
     private fun episodeColumns()=if(BuildConfig.CHANNEL=="phone") 5 else 10
     private fun applyOrientation(playing: Boolean) {
         if(BuildConfig.CHANNEL!="phone") return
@@ -1136,32 +1136,18 @@ class MainActivity: Activity() {
         }
         val gs=episodeGroupSize()
         val maxGroup=data.episodes.lastIndex/gs; group=group.coerceIn(0,maxGroup)
-        val groupLabel="第 ${group*gs+1}—${minOf((group+1)*gs,data.episodes.size)} 集"
-        if(BuildConfig.CHANNEL=="phone") {
-            val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
-            val previous=button("‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
-            groupRow.addView(previous,lp(0,dp(46)).apply { weight=1f; rightMargin=dp(6) })
-            groupRow.addView(text(groupLabel,14f).apply { gravity=Gravity.CENTER },lp(0,dp(46)).apply { weight=1f })
-            val next=button("下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
-            groupRow.addView(next,lp(0,dp(46)).apply { weight=1f })
-            content.addView(groupRow)
-            val jumpRow=row()
-            lateinit var jump: TextView
-            jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
-            jumpRow.addView(jump,lp(-1,dp(46)))
-            content.addView(jumpRow)
-        } else {
-            val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
-            val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
-            groupRow.addView(text(groupLabel,16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
-            val next=addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
-            lateinit var jump: TextView
-            jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
-            previous.nextFocusLeftId=jump.id; previous.nextFocusRightId=next.id
-            next.nextFocusLeftId=previous.id; next.nextFocusRightId=jump.id
-            jump.nextFocusLeftId=next.id; jump.nextFocusRightId=previous.id
-            content.addView(groupRow)
+        val groupRow=row().apply { setPadding(0,dp(3),0,dp(5)) }
+        lateinit var jump: TextView
+        jump=button("跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/gs; showDetail(true) } }
+        groupRow.addView(jump,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
+        for(g in 0..maxGroup) {
+            val start=g*gs+1; val end=minOf((g+1)*gs,data.episodes.size)
+            val item=button("$start-$end",g==group) { if(g!=group) { group=g; showDetail(true) } }
+            groupRow.addView(item,lp(LinearLayout.LayoutParams.WRAP_CONTENT,-2).apply { rightMargin=dp(8) })
         }
+        val groupScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
+        groupScroll.addView(groupRow)
+        content.addView(groupScroll,lp(-1,-2))
         val episodes=mutableListOf<View>()
         val epCols=episodeColumns()
         (group*gs until minOf((group+1)*gs,data.episodes.size)).toList().chunked(epCols).forEach { numbers ->
@@ -1689,18 +1675,22 @@ class MainActivity: Activity() {
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed()=goBack()
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if(BuildConfig.CHANNEL!="phone" && screen!="player" && !(screen=="catalog" && tab==1) && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)) {
+        if(BuildConfig.CHANNEL!="phone" && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) && !(screen=="player" && !panel)) {
             val collected=ArrayList<View>()
             root.addFocusables(collected,View.FOCUS_FORWARD,View.FOCUSABLES_ALL)
-            val focusables=LinkedHashSet<View>()
-            collected.forEach { if(it.isShown && it.isEnabled && it.isFocusable && it.id!=View.NO_ID) focusables.add(it) }
-            val list=focusables.toList()
-            if(list.size>1) {
-                val current=root.findFocus()
-                val index=list.indexOfFirst { it===current }
-                if(index>=0) {
-                    val next=if(event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) (index+1)%list.size else (index-1+list.size)%list.size
-                    list[next].requestFocus()
+            val all=LinkedHashSet<View>()
+            collected.forEach { if(it.isShown && it.isEnabled && it.isFocusable && it.id!=View.NO_ID) all.add(it) }
+            val current=root.findFocus()
+            if(current!=null && all.size>1) {
+                val inNav=nav.any { it===current }
+                val loc=IntArray(2)
+                val group=all.filter { view -> nav.any { it===view } == inNav }.sortedWith(compareBy(
+                    { view -> view.getLocationOnScreen(loc); loc[1] },
+                    { view -> view.getLocationOnScreen(loc); loc[0] }))
+                val index=group.indexOfFirst { it===current }
+                if(index>=0 && group.size>1) {
+                    val next=if(event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) (index+1)%group.size else (index-1+group.size)%group.size
+                    group[next].requestFocus()
                     return true
                 }
             }
