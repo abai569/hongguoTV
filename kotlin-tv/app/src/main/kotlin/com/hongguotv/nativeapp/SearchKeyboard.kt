@@ -28,7 +28,7 @@ class SearchKeyboard(
     private fun keyTextFor(size: Int)=((size/resources.displayMetrics.density)*0.45f).coerceIn(9f,17f)
 
     private fun keyRow(): LinearLayout {
-        val row=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.CENTER_HORIZONTAL }
+        val row=LinearLayout(context).apply { orientation=HORIZONTAL; gravity=Gravity.START }
         addView(row,LayoutParams(-1,-2))
         rows.add(mutableListOf())
         return row
@@ -53,18 +53,28 @@ class SearchKeyboard(
     fun value(): String = text
     fun focusFirst() { post { rows.firstOrNull()?.firstOrNull()?.requestFocus() } }
     fun linkRight(targetId: Int) { if(targetId==View.NO_ID) return; rows.forEach { it.lastOrNull()?.nextFocusRightId=targetId } }
+    fun linkLeft(targetId: Int) { if(targetId==View.NO_ID) return; rows.forEach { it.firstOrNull()?.nextFocusLeftId=targetId } }
     override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
-        val availW=MeasureSpec.getSize(widthMeasureSpec)-paddingLeft-paddingRight
-        val availH=MeasureSpec.getSize(heightMeasureSpec)-paddingTop-paddingBottom
+        val wMode=MeasureSpec.getMode(widthMeasureSpec)
+        val wSize=MeasureSpec.getSize(widthMeasureSpec)
+        val hMode=MeasureSpec.getMode(heightMeasureSpec)
+        val hSize=MeasureSpec.getSize(heightMeasureSpec)
+        val dm=resources.displayMetrics
+        val width=if(wMode==MeasureSpec.EXACTLY && wSize>0) wSize else (dm.widthPixels*0.38f).toInt()
+        val availH=if(hMode!=MeasureSpec.UNSPECIFIED && hSize>0) hSize else (dm.heightPixels*0.55f).toInt()
         val rowN=childCount.coerceAtLeast(1)
-        val byW=(availW-gapX*(cols-1))/cols
+        val byW=(width-gapX*(cols-1))/cols
         val byH=(availH-gapY*rowN)/rowN
-        val size=minOf(byW,byH).coerceIn(dpi(16),dpi(64))
+        val floor=dpi(20)
+        var size=minOf(byW,byH)
+        if(size<floor) size=floor
+        if(byW>=floor && size>byW) size=byW
         if(size!=keySize) {
             keySize=size; val ts=keyTextFor(size)
             rows.forEach { r -> r.forEach { k -> k.layoutParams=LayoutParams(size,size).apply { marginEnd=gapX; topMargin=gapY }; k.textSize=ts } }
         }
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),rowN*(keySize+gapY))
+        val measuredW=if(wMode==MeasureSpec.EXACTLY) width else cols*keySize+gapX*(cols-1)
+        setMeasuredDimension(measuredW,rowN*(keySize+gapY))
     }
 
     init {

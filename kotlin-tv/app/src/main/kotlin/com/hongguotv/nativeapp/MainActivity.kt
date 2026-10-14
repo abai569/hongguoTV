@@ -152,6 +152,14 @@ class MainActivity: Activity() {
     private var generation=0
     private var screen="catalog"
     private var lastStreamDebug=""
+    private var forceH264=false
+    private val hevcSupported by lazy {
+        runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                !info.isEncoder && info.supportedTypes.any { it.equals("video/hevc",true) || it.equals("video/h265",true) }
+            }
+        }.getOrDefault(false)
+    }
     private var tab=0
     private var page=1
     private var query=""
@@ -578,6 +586,9 @@ class MainActivity: Activity() {
                 keyboard?.setText(searchDraft)
                 val rightTarget=host.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
+                val historyTarget=historyFlow?.let { if(it.childCount>0) it.getChildAt(0).id else View.NO_ID } ?: View.NO_ID
+                if(historyTarget!=View.NO_ID) { input.nextFocusLeftId=historyTarget; keyboard?.linkLeft(historyTarget) }
+                input.nextFocusRightId=rightTarget
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
                 nav.forEach { it.nextFocusDownId=input.id }
                 searchPanelShown=true
@@ -1102,7 +1113,7 @@ class MainActivity: Activity() {
         })
     }
     private fun openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,fromStart: Boolean=false) {
-        pendingDetail=series; detailAutoplay=autoplay
+        pendingDetail=series; detailAutoplay=autoplay; forceH264=false
         invalidatePage(); releaseCatalogViews(); screen="detail"; directPlayback=resume; detail=null; synopsisExpanded=false
         val body=base(series.title); message(body,"正在加载剧集…")
         work({ repository.detail(series.id) }, { result ->
@@ -1418,7 +1429,7 @@ class MainActivity: Activity() {
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
+        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality,hevcSupported && !forceH264); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
             if(library.danmakuEnabled) {
                 danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
@@ -1509,7 +1520,7 @@ class MainActivity: Activity() {
             var remote: RemoteVideo?=null
             try {
                 val prepared=scope.run {
-                    RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
+                    RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264)).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
             } catch(_: Exception) { remote?.close() }
@@ -1529,7 +1540,7 @@ class MainActivity: Activity() {
         prefetchJob=prefetchWorker.submit {
             var remote: RemoteVideo?=null
             try {
-                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() } }
+                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264)).also { remote=it; it.warm() } }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Episode prepared after opening detail")
             } catch(_: Exception) { remote?.close() }
         }
@@ -1549,6 +1560,15 @@ class MainActivity: Activity() {
     }
     private fun playerFailure(problem: Throwable) {
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
+        val wasHevc=video?.info?.codec?.lowercase()?.let { it in setOf("bytevc1","hvc1","hev1","hevc") }==true
+        if(wasHevc && !forceH264) {
+            forceH264=true
+            saveProgress(); cancelRecovery(); cancelPrefetch()
+            playError=false; progressBar.visibility=View.GONE
+            playbackText.text="当前清晰度解码异常，改用兼容清晰度重试…"
+            main.postDelayed({ if(screen=="player") playEpisode(episodeIndex,retryPosition,retryAutoplay) },400)
+            return
+        }
         saveProgress(); cancelRecovery(); cancelPrefetch()
         playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
         val decoding=problem is PlaybackException && problem.errorCode in 3000..4999
@@ -1771,7 +1791,7 @@ class MainActivity: Activity() {
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed()=goBack()
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if(BuildConfig.CHANNEL!="phone" && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) && !(screen=="player" && !panel)) {
+        if(BuildConfig.CHANNEL!="phone" && event.action==KeyEvent.ACTION_DOWN && (event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT) && !(screen=="player" && !panel) && !(screen=="catalog" && tab==1)) {
             val collected=ArrayList<View>()
             root.addFocusables(collected,View.FOCUS_FORWARD,View.FOCUSABLES_ALL)
             val all=LinkedHashSet<View>()

@@ -26,6 +26,7 @@ data class StreamInfo(val url: String, val key: ByteArray?, val quality: String)
     var danmakuRaw: JSONArray = JSONArray()
     var episodeId: String = ""
     var durationMs: Long = 0L
+    var codec: String = ""
 }
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
@@ -179,7 +180,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(episodes.isEmpty() || episodes.any { !it.matches(Regex("[0-9]{1,30}")) } || episodes.distinct().size!=episodes.size) throw IOException("分集数据异常")
         return Detail(card(o).copy(id=id),episodes)
     }
-    fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
+    fun stream(id: String, maxQuality: Int = 1080, allowHevc: Boolean = true): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val biz="""{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024}"""
         val body="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
@@ -196,7 +197,9 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(list!=null && list.length()>0) {
             val rows=list.objects().mapNotNull { o ->
                 val meta=o.optJSONObject("video_meta") ?: JSONObject()
-                if(o.str("main_url").isEmpty() || meta.str("codec_type").lowercase() in setOf("bytevc2","bvc2")) null
+                val codec=meta.str("codec_type").lowercase()
+                if(o.str("main_url").isEmpty() || codec in setOf("bytevc2","bvc2")) null
+                else if(!allowHevc && codec in setOf("bytevc1","hvc1","hev1","hevc")) null
                 else Triple(qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") }),o,meta)
             }.sortedByDescending { it.first }.toList()
             val chosen=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
@@ -207,6 +210,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     val quality=if(chosen.first>0) "${chosen.first}P"+(if(chosen.first>maxQuality) "（兼容资源）" else "") else "自动"
                     val result=StreamInfo(url,key,quality)
                     result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
+                    result.codec=chosen.third.str("codec_type")
                     return result
                 }
             }
@@ -219,7 +223,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             val videoList=info?.optJSONObject("video_list")
             if(videoList!=null) {
                 val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
-                    it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2")
+                    it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2") &&
+                        (allowHevc || it.second.str("codec_type").lowercase() !in setOf("bytevc1","hvc1","hev1","hevc"))
                 }.map { (k,o) -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) }.sortedByDescending { it.first }.toList()
                 val selected=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
                 if(selected!=null) {
@@ -231,6 +236,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                         val result=StreamInfo(url,key,quality)
                         result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
                         result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
+                        result.codec=item.str("codec_type")
                         return result
                     }
                 }
@@ -242,6 +248,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(ok) {
             val result=StreamInfo(publicUrl,null,"360P")
             result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
+            result.codec="h264"
             return result
         }
         throw IOException("没有可播放的清晰度，请稍后再试")
