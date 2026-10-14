@@ -1001,6 +1001,11 @@ class MainActivity: Activity() {
             library.danmakuEnabled=!library.danmakuEnabled
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
+        lateinit var hevcButton: TextView
+        hevcButton=setting(playback,"解码  ·  ${if(library.hevcDisabled) "仅 H.264（兼容）" else "自动（含 HEVC）"}") {
+            library.hevcDisabled=!library.hevcDisabled
+            hevcButton.text="解码  ·  ${if(library.hevcDisabled) "仅 H.264（兼容）" else "自动（含 HEVC）"}"
+        }
         val exportBtn=setting(device,"导出备份到本地") { exportBackup() }
         val importBtn=setting(device,"从本地文件恢复") { importBackup() }
         lateinit var hidden: TextView
@@ -1024,7 +1029,7 @@ class MainActivity: Activity() {
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,hevcButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
         if(BuildConfig.CHANNEL=="phone") {
             (left+right).forEachIndexed { index,view ->
                 view.nextFocusUpId=(left+right).getOrNull(index-1)?.id ?: nav[tab].id
@@ -1438,7 +1443,7 @@ class MainActivity: Activity() {
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality,hevcSupported && !forceH264); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
+        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality,hevcSupported && !forceH264 && !library.hevcDisabled); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
             if(library.danmakuEnabled) {
                 danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
@@ -1529,7 +1534,7 @@ class MainActivity: Activity() {
             var remote: RemoteVideo?=null
             try {
                 val prepared=scope.run {
-                    RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264)).also { remote=it; it.warm() }
+                    RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !library.hevcDisabled)).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
             } catch(_: Exception) { remote?.close() }
@@ -1549,7 +1554,7 @@ class MainActivity: Activity() {
         prefetchJob=prefetchWorker.submit {
             var remote: RemoteVideo?=null
             try {
-                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264)).also { remote=it; it.warm() } }
+                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !library.hevcDisabled)).also { remote=it; it.warm() } }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Episode prepared after opening detail")
             } catch(_: Exception) { remote?.close() }
         }
@@ -1571,7 +1576,7 @@ class MainActivity: Activity() {
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         val wasHevc=video?.info?.codec?.lowercase()?.let { it in setOf("bytevc1","hvc1","hev1","hevc") }==true
         if(wasHevc && !forceH264) {
-            forceH264=true
+            forceH264=true; library.hevcDisabled=true
             saveProgress(); cancelRecovery(); cancelPrefetch()
             playError=false; progressBar.visibility=View.GONE
             playbackText.text="当前清晰度解码异常，改用兼容清晰度重试…"

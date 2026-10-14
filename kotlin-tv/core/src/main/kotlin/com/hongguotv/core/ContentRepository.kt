@@ -188,80 +188,83 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     fun stream(id: String, maxQuality: Int = 1080, allowHevc: Boolean = true): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val biz="""{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024}"""
-        val body="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        val model=runCatching {
-            val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",freshDevice(),body)
-            val data=JSONObject(text(signed.url,signed))
-            if(data.optInt("Code",data.optInt("code",0))!=0) return@runCatching null
-            val map=data.optJSONObject("data") ?: return@runCatching null
-            val entry=map.optJSONObject(id) ?: map.keys().asSequence().mapNotNull { map.optJSONObject(it) }.firstOrNull() ?: return@runCatching null
-            entry.optJSONObject("video_model") ?: JSONObject(entry.str("video_model"))
-        }.getOrNull()
-        var durationMs=0L
-        if(model!=null) {
-            durationMs=(model.optDouble("video_duration",0.0)*1000).toLong()
-            // Prefer a codec Android can decode. Skip ByteVC2 (bvc2) which has no platform decoder; the
-            // 1080p variant is ByteVC1, a standard HEVC (hvc1) stream that hardware decoders handle.
-            val list=model.optJSONArray("video_list")
-            if(list!=null && list.length()>0) {
-                val rows=list.objects().mapNotNull { o ->
-                    val meta=o.optJSONObject("video_meta") ?: JSONObject()
-                    val codec=meta.str("codec_type").lowercase()
-                    if(o.str("main_url").isEmpty() || codec in setOf("bytevc2","bvc2")) null
-                    else if(!allowHevc && codec in setOf("bytevc1","hvc1","hev1","hevc")) null
-                    else Triple(qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") }),o,meta)
-                }.sortedByDescending { it.first }.toList()
-                val chosen=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
-                if(chosen!=null) {
-                    val item=chosen.second; val url=cleanUrl(item.str("main_url"))
-                    if(url.startsWith("https://") || url.startsWith("http://")) {
-                        val key=item.optJSONObject("encrypt_info")?.str("spade_a")?.takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-                        val quality=if(chosen.first>0) "${chosen.first}P"+(if(chosen.first>maxQuality) "（兼容资源）" else "") else "自动"
-                        val result=StreamInfo(url,key,quality)
-                        result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
-                        result.codec=chosen.third.str("codec_type")
-                        return result
-                    }
-                }
-            }
-            // Legacy fallback_api mirror.
-            val raw=model.opt("fallback_api")
-            val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
-            if(fallback.startsWith("https://")) {
-                val info=runCatching { JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") }.getOrNull()
-                val videoList=info?.optJSONObject("video_list")
-                if(videoList!=null) {
-                    val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
-                        it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2") &&
-                            (allowHevc || it.second.str("codec_type").lowercase() !in setOf("bytevc1","hvc1","hev1","hevc"))
-                    }.map { (k,o) -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) }.sortedByDescending { it.first }.toList()
-                    val selected=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull()
-                    if(selected!=null) {
-                        val item=selected.third; var url=cleanUrl(item.str("main_url")); val seed=info.str("key_seed")
-                        if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
-                        if(url.startsWith("https://") || url.startsWith("http://")) {
-                            val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-                            val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-                            val result=StreamInfo(url,key,quality)
-                            result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
-                            result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
-                            result.codec=item.str("codec_type")
-                            return result
-                        }
-                    }
-                }
-            }
-        }
+        // Preload endpoint first, then the legacy endpoint (often carries an H.264 fallback_api the preload omits).
+        val preloadBody="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
+        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",preloadBody,id),maxQuality,allowHevc)?.let { return it }
+        val legacyBody="""{"biz_param":$biz,"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
+        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",legacyBody,id),maxQuality,allowHevc)?.let { return it }
         // Website public MP4 (plain H.264, low resolution): also used when the play API is unavailable.
         val publicUrl="https://hongguoduanju.com/video/public/$id/360p.mp4"
         val ok=runCatching { RequestScope.execute(http.newCall(Request.Builder().url(publicUrl).header("Range","bytes=0-1").header("User-Agent",VendorConstants.VIDEO_UA).build())) { it.isSuccessful } }.getOrDefault(false)
         if(ok) {
             val result=StreamInfo(publicUrl,null,"360P")
-            result.debugRaw=model?.toString() ?: ""; result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
-            result.codec="h264"
+            result.danmakuRaw=JSONArray(); result.episodeId=id; result.codec="h264"
             return result
         }
         throw IOException("暂时无法获取播放地址，请稍后重试")
+    }
+    private fun modelFrom(endpoint: String, body: ByteArray, id: String): JSONObject? = runCatching {
+        val signed=signer.sign(endpoint,freshDevice(),body)
+        val data=JSONObject(text(signed.url,signed))
+        if(data.optInt("Code",data.optInt("code",0))!=0) return@runCatching null
+        val map=data.optJSONObject("data") ?: return@runCatching null
+        val entry=map.optJSONObject(id) ?: map.keys().asSequence().mapNotNull { map.optJSONObject(it) }.firstOrNull() ?: return@runCatching null
+        entry.optJSONObject("video_model") ?: JSONObject(entry.str("video_model"))
+    }.getOrNull()
+    private fun codecRank(codec: String)=when(codec.lowercase()) { "h264","avc","avc1" -> 0; "bytevc2","bvc2" -> 3; "bytevc1","hvc1","hev1","hevc","h265" -> 2; else -> 1 }
+    private fun <T> pickBest(rows: List<Triple<Int,T,JSONObject>>, maxQuality: Int, allowHevc: Boolean): Triple<Int,T,JSONObject>? {
+        val allowed=rows.filter { val r=codecRank(it.third.str("codec_type")); r!=3 && (allowHevc || r<2) }
+        if(allowed.isEmpty()) return null
+        // Compatibility first: prefer H.264/unknown over HEVC, then the highest quality within that codec.
+        val topRank=allowed.minOf { codecRank(it.third.str("codec_type")) }
+        val group=allowed.filter { codecRank(it.third.str("codec_type"))==topRank }.sortedByDescending { it.first }
+        return group.firstOrNull { it.first<=maxQuality } ?: group.last()
+    }
+    private fun qualityLabel(q: Int, maxQuality: Int)=if(q>0) "${q}P"+(if(q>maxQuality) "（兼容资源）" else "") else "自动"
+    private fun streamFromModel(id: String, model: JSONObject?, maxQuality: Int, allowHevc: Boolean): StreamInfo? {
+        model ?: return null
+        val durationMs=(model.optDouble("video_duration",0.0)*1000).toLong()
+        val list=model.optJSONArray("video_list")
+        if(list!=null && list.length()>0) {
+            val rows=list.objects().mapNotNull { o ->
+                val meta=o.optJSONObject("video_meta") ?: o
+                if(o.str("main_url").isEmpty()) null
+                else Triple(qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") }),o,meta)
+            }
+            pickBest(rows,maxQuality,allowHevc)?.let { chosen ->
+                val item=chosen.second; val url=cleanUrl(item.str("main_url"))
+                if(url.startsWith("https://") || url.startsWith("http://")) {
+                    val key=item.optJSONObject("encrypt_info")?.str("spade_a")?.takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
+                    val result=StreamInfo(url,key,qualityLabel(chosen.first,maxQuality))
+                    result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
+                    result.codec=chosen.third.str("codec_type")
+                    return result
+                }
+            }
+        }
+        val raw=model.opt("fallback_api")
+        val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
+        if(fallback.startsWith("https://")) {
+            val info=runCatching { JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") }.getOrNull()
+            val videoList=info?.optJSONObject("video_list")
+            if(videoList!=null) {
+                val seed=info.str("key_seed")
+                val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.takeIf { it.str("main_url").isNotEmpty() }?.let { o -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) } }.toList()
+                pickBest(rows,maxQuality,allowHevc)?.let { selected ->
+                    val item=selected.third; var url=cleanUrl(item.str("main_url"))
+                    if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
+                    if(url.startsWith("https://") || url.startsWith("http://")) {
+                        val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
+                        val result=StreamInfo(url,key,qualityLabel(selected.first,maxQuality))
+                        result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
+                        result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
+                        result.codec=item.str("codec_type")
+                        return result
+                    }
+                }
+            }
+        }
+        return null
     }
     fun fetchDanmakuWindow(episodeId: String, offset: Long, durationMs: Long): JSONArray {
         val result=JSONArray()

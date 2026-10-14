@@ -194,13 +194,16 @@ class Library(context: Context) {
     var danmakuEnabled: Boolean
         get() = state().settings.danmaku
         set(value) { if (value != danmakuEnabled) { state().settings = state().settings.copy(danmaku = value); put("danmaku", value) } }
+    var hevcDisabled: Boolean
+        get() = state().settings.disableHevc
+        set(value) { if (value != hevcDisabled) { state().settings = state().settings.copy(disableHevc = value); put("disableHevc", value) } }
     fun snapshot() = state().snapshot()
     fun restore(incoming: BackupData, restoreSettings: Boolean) {
         val merged = LibraryBackup.merge(snapshot(), incoming, restoreSettings)
         index = LibraryIndex(merged, state().updates())
         persist("favorites", "later", "progress", "watched", "hidden", "searches", "favoriteUpdates")
         writes.submit(mapOf("quality" to { merged.settings.quality }, "playbackSpeed" to { merged.settings.speed },
-            "autoNext" to { merged.settings.autoNext }, "contentType" to { merged.settings.type.storedValue }, "frameMode" to { merged.settings.frame.name }))
+            "autoNext" to { merged.settings.autoNext }, "contentType" to { merged.settings.type.storedValue }, "frameMode" to { merged.settings.frame.name }, "disableHevc" to { merged.settings.disableHevc }))
         flush()
     }
     /** Requests prompt background commit, without lifecycle-thread disk waits. */
