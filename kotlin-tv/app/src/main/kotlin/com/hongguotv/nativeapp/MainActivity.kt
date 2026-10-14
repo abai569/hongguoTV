@@ -257,6 +257,13 @@ class MainActivity: Activity() {
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
     private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
     private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+    /** 手机竖屏放不下一排按钮时套一层横向滚动，免得尾部按钮点不到（电视横屏够宽，保持原样）。 */
+    private fun addRow(host: LinearLayout,row: LinearLayout) {
+        if(BuildConfig.CHANNEL!="phone") { host.addView(row); return }
+        val scroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; clipToPadding=false }
+        scroll.addView(row)
+        host.addView(scroll,lp())
+    }
     private val isTvDevice by lazy {
         packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
         !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
@@ -1001,11 +1008,8 @@ class MainActivity: Activity() {
             library.danmakuEnabled=!library.danmakuEnabled
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
-        lateinit var hevcButton: TextView
-        hevcButton=setting(playback,hevcLabel()) {
-            library.hevcDisabled=!library.hevcDisabled
-            hevcButton.text=hevcLabel()
-        }
+        lateinit var decoderButton: TextView
+        decoderButton=setting(playback,"解码方式  ·  ${decoderLabel()}") { showDecoderPicker(decoderButton,false) }
         val exportBtn=setting(device,"导出备份到本地") { exportBackup() }
         val importBtn=setting(device,"从本地文件恢复") { importBackup() }
         lateinit var hidden: TextView
@@ -1019,7 +1023,7 @@ class MainActivity: Activity() {
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,hevcButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,decoderButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
         if(BuildConfig.CHANNEL=="phone") {
             (left+right).forEachIndexed { index,view ->
                 view.nextFocusUpId=(left+right).getOrNull(index-1)?.id ?: nav[tab].id
@@ -1128,62 +1132,44 @@ class MainActivity: Activity() {
             if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else { prefetchEpisode(target.index); showDetail(false) }
         }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay,fromStart) } })
     }
-    private fun baseTitle(title: String): String {
-        var t=title.trim()
-        t=t.replace(Regex("第[0-9一二三四五六七八九十百两零]+[季部]"),"").trim()
-        t=t.replace(Regex("[0-9]+$"),"").trim()
-        t=t.trimEnd('季','部',' ','　','·','-','—',':','：')
-        return t.ifBlank { title.trim() }
-    }
-    private fun normTitle(value: String)=value.replace(Regex("[\\s·:：、,.。\\-—()（）\\[\\]【】!！?？\"'“”‘’]"),"").lowercase()
-    private fun cnNumber(s: String): Int {
-        if(s.all { it.isDigit() }) return s.toIntOrNull() ?: 0
-        val map=mapOf('零' to 0,'一' to 1,'二' to 2,'两' to 2,'三' to 3,'四' to 4,'五' to 5,'六' to 6,'七' to 7,'八' to 8,'九' to 9)
-        var total=0; var number=0
-        for(c in s) when {
-            c=='百' -> { total+=(if(number==0) 1 else number)*100; number=0 }
-            c=='十' -> { total+=(if(number==0) 1 else number)*10; number=0 }
-            map.containsKey(c) -> number=map.getValue(c)
-            else -> {}
-        }
-        return total+number
-    }
-    private fun seasonNumber(title: String): Int {
-        val m=Regex("第([0-9一二三四五六七八九十百两零]+)[季部]").find(title) ?: return 0
-        return cnNumber(m.groupValues[1])
-    }
     private fun findOtherSeasons(anchor: View?,play: Boolean) {
         val data=detail ?: return
         val current=data.series
-        val base=baseTitle(current.title)
-        val nb=normTitle(base)
-        val curSeason=seasonNumber(current.title)
+        val base=Seasons.base(current.title)
+        Toast.makeText(this,"正在查找其他季…",Toast.LENGTH_SHORT).show()
         work({
-            val out=LinkedHashMap<String,Series>()
-            val keywords=listOf(current.title,base).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            for(kw in keywords) for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
+            val rows=LinkedHashMap<String,Series>()
+            // 搜索建议接口一次就给出整部剧的所有季（含季名、集数、简介），App/网页搜索都会漏掉几季
+            runCatching { repository.searchSuggestSeries(base,20) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
+            for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
                 var page=1
-                while(page<=3) {
-                    val r=runCatching { repository.search(kw,page,type) }.getOrNull() ?: break
-                    r.items.forEach { out[it.id]=it }
+                while(page<=2) {
+                    val r=runCatching { repository.search(base,page,type) }.getOrNull() ?: break
+                    r.items.forEach { rows[it.id]=it }
                     if(!r.hasMore) break
                     page++
                 }
             }
-            val seen=mutableSetOf<String>()
-            val picked=mutableListOf<Series>()
-            out.values
-                .filter { it.id!=current.id && normTitle(it.title).contains(nb) }
-                .forEach { s ->
-                    val sn=seasonNumber(s.title)
-                    if(curSeason>0 && sn==curSeason) return@forEach
-                    val key=if(sn>0) "S$sn" else "T"+normTitle(s.title)
-                    if(seen.add(key)) picked.add(s)
+            // suggestion 服务端封顶 20 条：季数超过 20 的剧会缺口，按缺失季号再问一次（预算 12 次，写法跟随已有剧名）
+            val currentSeason=Seasons.currentSeason(base,current.title)
+            val arabic=rows.values.any { Regex("第[0-9]").containsMatchIn(it.title) }
+            val highest=rows.values.mapNotNull { Seasons.number(it.title).takeIf { n -> n>0 } }.maxOrNull() ?: 0
+            val upper=(maxOf(highest,currentSeason,6)+2).coerceAtMost(40)
+            var probes=12
+            for(season in 1..upper) {
+                if(probes<=0) break
+                if(season==currentSeason || rows.values.any { Seasons.number(it.title)==season }) continue
+                for(spelling in if(arabic) listOf(season.toString(),Seasons.numeral(season)) else listOf(Seasons.numeral(season),season.toString())) {
+                    if(probes<=0 || rows.values.any { Seasons.number(it.title)==season }) break
+                    probes--
+                    val query=if(season==1) base else "$base 第${spelling}季"
+                    runCatching { repository.searchSuggestSeries(query,8) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
                 }
-            picked.sortedWith(compareBy({ seasonNumber(it.title).let { n -> if(n>0) n else Int.MAX_VALUE } },{ it.title }))
+            }
+            Seasons.pick(base,current.id,current.title,rows.values.toList())
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
-            val labels=list.map { "${it.title}  ·  ${it.badge.ifBlank { "查看剧集" }}" }
+            val labels=list.map { Seasons.label(base,it.title,it.badge) }
             tvTools.choose("查找其他季（共 ${list.size}）",labels,anchor,{ index ->
                 val picked=list[index]
                 main.post { if(play) openDetail(picked,resume=true,autoplay=true,fromStart=true) else openDetail(picked) }
@@ -1606,7 +1592,7 @@ class MainActivity: Activity() {
         val decoding=problem is PlaybackException && problem.errorCode in 3000..4999
         val retryable=if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException
         playbackText.text=if(decoding) "电视无法解码当前视频，可尝试更低清晰度。" else "播放失败，可重试或切换清晰度。"
-        val actions=row(); controls.addView(actions)
+        val actions=row(); addRow(controls,actions)
         addButton(actions,"立即重试") { playEpisode(episodeIndex,retryPosition,retryAutoplay) }.requestFocus()
         addButton(actions,"尝试 720P") { library.maxQuality=720; playEpisode(episodeIndex,retryPosition,retryAutoplay) }
         addButton(actions,"返回选集") { returnToDetail(true) }
@@ -1688,7 +1674,16 @@ class MainActivity: Activity() {
         })
     }
     private fun softwareCodec(name: String)=name.startsWith("c2.android.")||name.startsWith("OMX.google.")
-    private fun hevcLabel()=if(library.hevcDisabled) "HEVC 硬解码  ·  关闭（软解）" else "HEVC 硬解码  ·  开启"
+    private fun decoderLabel()=if(library.hevcDisabled) "软解" else "硬解"
+    /** 硬解 = 电视解码器直解 HEVC；软解 = 平台软件解码器，部分电视硬解会在画面上方出绿带。 */
+    private fun showDecoderPicker(anchor: TextView,inPlayer: Boolean) {
+        val previous=library.hevcDisabled
+        tvTools.choose("解码方式 · 当前 ${decoderLabel()}",listOf("硬解 · 电视解码器直接解 HEVC，省电流畅；部分电视画面上方出现绿色条带","软解 · 平台软件解码器，画面干净；吃 CPU，老电视可能掉帧"),anchor,{ choice ->
+            library.hevcDisabled=choice==1
+            if(anchor.tag!="playback-settings") anchor.text="解码方式  ·  ${decoderLabel()}"
+            if(inPlayer && library.hevcDisabled!=previous) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
+        })
+    }
     private fun frameResizeMode()=when(library.frameMode) {
         VideoFrameMode.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
         VideoFrameMode.ZOOM -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
@@ -1710,7 +1705,7 @@ class MainActivity: Activity() {
     private fun showPanel() {
         if(playError) return
         panel=true; showHud(); controls.visibility=View.VISIBLE; controls.removeAllViews()
-        val transport=row(); controls.addView(transport)
+        val transport=row(); addRow(controls,transport)
         addButton(transport,if(player?.playWhenReady==true) "暂停" else "播放") { togglePlayback() }.also { transportPlay=it }
         addButton(transport,"上一集") { if(episodeIndex>0) playEpisode(episodeIndex-1) }.apply { isEnabled=episodeIndex>0; isFocusable=episodeIndex>0; alpha=if(episodeIndex>0) 1f else .4f }
         addButton(transport,"下一集") { if(episodeIndex<(detail?.episodes?.lastIndex ?: 0)) playEpisode(episodeIndex+1) }.apply { val enabled=episodeIndex<(detail?.episodes?.lastIndex ?: 0); isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .4f }
@@ -1720,13 +1715,13 @@ class MainActivity: Activity() {
         seasons=addButton(transport,"其他季") { findOtherSeasons(seasons,true) }
         lateinit var more: TextView
         more=addButton(transport,"播放设置") {
-            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","HEVC ${if(library.hevcDisabled) "软解" else "硬解"}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
+            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","解码方式 ${decoderLabel()}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
                         0 -> showSpeedPicker(more)
                         1 -> showQualityPicker(more,true)
                         2 -> showFramePicker(more,true)
-                        3 -> { library.hevcDisabled=!library.hevcDisabled; more.text="播放设置"; playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay) }
+                        3 -> showDecoderPicker(more,true)
                         4 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
                         5 -> showSleepPicker(more)
                         6 -> { seekTo(0); hidePanel() }

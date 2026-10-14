@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -40,7 +42,7 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=212
+          export HONGGUOTV_VERSION_CODE=213
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
@@ -63,10 +65,32 @@ jobs:
           ph_size=$(stat -c%s "$phone_apk"); ph_sha=$(sha256sum "$phone_apk" | awk '{print $1}')
           min_sdk=$(grep -oE 'minSdk *= *[0-9]+' kotlin-tv/app/build.gradle.kts | grep -oE '[0-9]+' | head -n1)
           [[ "$min_sdk" =~ ^[0-9]+$ ]]
-          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":%s,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影TV %s"}\n' \
-            "$HONGGUOTV_VERSION_CODE" "$version" "$min_sdk" "$VERSION" "$tv_apk" "$tv_size" "$tv_sha" "$version" > update.json
-          printf '{"schema":1,"packageName":"com.hongguotv.phone","versionCode":%s,"versionName":"%s","minSdk":%s,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":"橘影 %s"}\n' \
-            "$HONGGUOTV_VERSION_CODE" "$version" "$min_sdk" "$VERSION" "$phone_apk" "$ph_size" "$ph_sha" "$version" > update-phone.json
+          # Release notes come from CHANGELOG.md: the section whose heading matches this tag's version.
+          notes=$(awk -v version="$version" '
+            /^##[[:space:]]/ {
+              if (started) exit
+              heading=$0
+              sub(/^##[[:space:]]+/,"",heading); gsub(/[][]/,"",heading)
+              sub(/[[:space:]].*$/,"",heading); sub(/^v/,"",heading)
+              if (heading==version) { started=1; next }
+            }
+            started { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac)
+          if [[ -z "$notes" ]]; then
+            notes="橘影TV ${version}"
+          else
+            printf '%s\n' "$notes" > release-notes.md
+            echo "RELEASE_NOTES_FILE=release-notes.md" >> "$GITHUB_ENV"
+          fi
+          if command -v jq >/dev/null 2>&1; then
+            notes_json=$(printf '%s' "$notes" | jq -Rsc .)
+          else
+            notes_json=$(printf '%s' "$notes" | python3 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read()))')
+          fi
+          printf '{"schema":1,"packageName":"com.hongguotv.nativeapp","versionCode":%s,"versionName":"%s","minSdk":%s,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":%s}\n' \
+            "$HONGGUOTV_VERSION_CODE" "$version" "$min_sdk" "$VERSION" "$tv_apk" "$tv_size" "$tv_sha" "$notes_json" > update.json
+          printf '{"schema":1,"packageName":"com.hongguotv.phone","versionCode":%s,"versionName":"%s","minSdk":%s,"tag":"%s","apk":{"name":"%s","size":%s,"sha256":"%s"},"notes":%s}\n' \
+            "$HONGGUOTV_VERSION_CODE" "$version" "$min_sdk" "$VERSION" "$phone_apk" "$ph_size" "$ph_sha" "$notes_json" > update-phone.json
           sha256sum "$tv_apk" "$phone_apk" update.json update-phone.json > SHA256SUMS
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/kotlin-v')
@@ -77,10 +101,18 @@ jobs:
         run: |
           set -euo pipefail
           version="${VERSION#kotlin-v}"
+          notes_args=(--generate-notes)
+          if [[ -n "${RELEASE_NOTES_FILE:-}" && -s "${RELEASE_NOTES_FILE}" ]]; then
+            previous=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+            if [[ -n "$previous" ]]; then
+              printf '\n完整变更：https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$previous" "$TAG" >> "$RELEASE_NOTES_FILE"
+            fi
+            notes_args=(--notes-file "$RELEASE_NOTES_FILE")
+          fi
           gh release create "$TAG" "$TV_APK" "$PHONE_APK" update.json update-phone.json SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --title "橘影 ${version}" \
-            --generate-notes
+            "${notes_args[@]}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

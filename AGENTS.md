@@ -8,9 +8,19 @@
 - 用户仅要求修改代码或配置时，只改动文件并停留在工作区，连 `git commit` 都不要执行。等用户明确说"发版"或"提交"再一次性 commit + push + tag。
 - 每次发版必须递增版本号（versionName 和 versionCode），打新 tag；不得删除已有 tag 后重打同一个版本号。上一版有 bug 就修完发新版本，不要覆盖旧版本。
 - versionCode 必须跟随版本号：等于 versionName 去掉点号后的数字，例如 `1.5.8` 对应 `versionCode 158`；发版时两者一起更新，不得使用无关的临时递增数字。
+- 现行 versionCode 按顺序 +1 落地（2.0.9=209、2.0.10=210、2.1.0=211、2.1.1=212）：应用内更新（AppUpdater）要求 versionCode 严格大于已安装版本，所以当"去点号"算出的数字不大于上一版时，取上一版 +1。发版时同时改 `.github/workflows/kotlin-native.yml` 里的 `HONGGUOTV_VERSION_CODE` 和 `kotlin-tv/app/build.gradle.kts` 的 `versionCode`/`versionName` 默认值。
 - CI 构建失败后，修复代码也不能自己 push。修好停在工作区，等用户说发版再 push 触发新构建。
-- 发版流程：用户说"发版"→ 递增版本号 → commit → push main → 打新 tag → push tag → 监控 CI 直到成功或失败并报告结果。
+- 发版流程：用户说"发版"→ 在 `CHANGELOG.md` 最上面写好该版本的更新日志 → 递增版本号 → commit → push main → 打新 tag → push tag → 监控 CI 直到成功或失败并报告结果。
 - 发版前不要在本地编译、跑测试或做任何本地验证：直接提交、推送并打 tag，由 CI 完成验证；只有用户当前消息明确要求本地验证时才执行。
 - 用户说"发版"：用同一个版本号重发（删旧 tag 重打），适用于 CI 失败修复后重发。
 - 用户说"发新版"：递增版本号再发，适用于上次发版成功后的新版本。
 - 发版后必须主动监控 CI 构建状态，直到成功或失败。失败时自动修复编译错误，修好后等用户说"发版"再重发。
+
+## 更新日志（每次发版必须写）
+
+- 每次发版都要在仓库根目录 `CHANGELOG.md` 最上面新增一节：标题行 `## <版本号>`（例如 `## 2.1.2`），正文紧跟其后；历史版本的内容不要再改。
+- CI 会把 tag 对应版本的那一节自动写进两个地方：GitHub Release 正文，以及 `update.json` / `update-phone.json` 的 `notes` —— 应用内「设置 → 版本与更新」弹窗显示的就是 `notes`。
+- 因此正文必须用**纯文本也能读**的写法：`- ` 列表加普通文字即可；不要用 `**加粗**`、`###` 小标题、Markdown 链接（应用内弹窗按纯文本渲染，会把符号原样显示出来）。版本间的「完整变更」对比链接由 CI 追加到 Release 正文，不要写进 `CHANGELOG.md`。
+- 内容按用户视角写，分「新增 / 调整」「修复」两类，写清现象与改法（例如"关掉 HEVC 后播放失败 → 改为回落 HEVC 源并标注软解"），不能只抄提交信息。确实没有内容也要写一句说明（例如「仅同步依赖，无功能变化」）。
+- 不允许留空，也不允许只留 CI `--generate-notes` 自动生成的提交列表。
+- CI 找不到该版本的节时会回退成一行标签「橘影TV <版本>」且不报错；出现这种情况说明漏写了 `CHANGELOG.md`，必须补写该节，再用 `gh release edit <tag> --repo abai569/hongguoTV --notes-file <文件>` 补进 Release 正文；应用内 `notes` 需要同步重新上传 `update.json` / `update-phone.json`。

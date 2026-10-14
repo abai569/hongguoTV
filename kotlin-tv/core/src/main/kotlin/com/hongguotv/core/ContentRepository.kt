@@ -112,7 +112,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val data=router("$site/search/${Signer.encode(keyword)}?page=$page")
         val section=data.optJSONObject("search_(keyword)/page") ?: data.optJSONObject("search_page") ?: throw IOException("搜索数据暂不可用")
         val rows=section.optJSONArray("searchList") ?: throw IOException("搜索数据结构已变化")
-        val items=valid(rows.objects().map(::card))
+        val items=valid(rows.objects().map(::card)).filter { Seasons.matchesQuery(keyword,it.title) }
         return CatalogPage(items,items.isNotEmpty() && page<100)
     }
     private fun appSearch(keyword: String, page: Int, type: ContentType): CatalogPage {
@@ -152,23 +152,51 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             searchCursors[Triple(type,keyword,page)]=SearchCursor(tab.str("search_id"),tab.str("passback"),tab.str("next_offset").toIntOrNull(),clock())
             while(searchCursors.size>100) searchCursors.remove(searchCursors.keys.first())
         }
-        return CatalogPage(valid(list),tab.optBoolean("has_more",false) && page<100)
+        return CatalogPage(valid(list).filter { Seasons.matchesQuery(keyword,it.title) },tab.optBoolean("has_more",false) && page<100)
     }
     fun searchAll(keyword: String, page: Int = 1): CatalogPage {
         val short=runCatching { search(keyword,page,ContentType.SHORT) }.getOrElse { CatalogPage(emptyList(),false) }
         val comic=runCatching { search(keyword,page,ContentType.COMIC) }.getOrElse { CatalogPage(emptyList(),false) }
-        val items=(short.items+comic.items).distinctBy { it.id }
+        // App 与网页搜索都会漏季（例如「万妖图录传第二季」），第一页再并入搜索建议里的同系列剧集
+        val aliases=if(page==1) runCatching { searchSuggestSeries(keyword,20) }.getOrDefault(emptyList()) else emptyList()
+        val items=(short.items+comic.items+aliases).distinctBy { it.id }
         if(items.isEmpty() && !short.hasMore && !comic.hasMore) throw IOException("Search unavailable")
         return CatalogPage(items,short.hasMore || comic.hasMore)
     }
-    fun searchSuggest(keyword: String): List<String> {
+    fun searchSuggest(keyword: String,count: Int=10): List<String> {
         val query=keyword.trim()
         if(query.isEmpty()) return emptyList()
+        val limit=count.coerceIn(1,30)
         val webId=Signer.encode(VendorConstants.device.getValue("device_id"))
-        val url="$site/incent_resource/suggestion?app_id=8662&web_id=$webId&query=${Signer.encode(query)}&count=10"
+        val url="$site/incent_resource/suggestion?app_id=8662&web_id=$webId&query=${Signer.encode(query)}&count=$limit"
         val data=JSONObject(text(url))
         val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
-        return arr.objects().mapNotNull { it.str("name").ifBlank { null } }.take(10)
+        return arr.objects().mapNotNull { it.str("name").ifBlank { null } }.take(limit)
+    }
+    /** 搜索建议里带完整剧集信息（季名、集数、简介），是「其他季」最全的来源，也能补上 App/网页搜索漏掉的季。 */
+    fun searchSuggestSeries(keyword: String,count: Int=20): List<Series> {
+        val query=keyword.trim()
+        if(query.isEmpty()) return emptyList()
+        val limit=count.coerceIn(1,30)
+        val webId=Signer.encode(VendorConstants.device.getValue("device_id"))
+        val url="$site/incent_resource/suggestion?app_id=8662&web_id=$webId&query=${Signer.encode(query)}&count=$limit"
+        val data=JSONObject(text(url))
+        val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
+        val rows=arr.objects().mapNotNull { row ->
+            val video=row.optJSONObject("video_data")
+            // 只收正式剧名条目：纠错联想/聚合词（word_type=title、common_query）不是剧集，标题里却常含查询词
+            val kind=row.str("word_type")
+            if(kind.isNotEmpty() && kind!="short_play_name") return@mapNotNull null
+            val id=row.str("keyword").ifEmpty { video?.str("series_id").orEmpty() }
+            val title=row.str("name").ifEmpty { video?.str("title").orEmpty() }
+            if(id.isBlank() || title.isBlank()) return@mapNotNull null
+            val episodes=video?.optInt("episode_cnt") ?: 0
+            val tags=video?.optJSONArray("category_list") ?: JSONArray()
+            Series(id,title,cleanUrl(video?.str("series_cover").orEmpty()),video?.str("series_intro").orEmpty(),
+                video?.str("episode_right_text").orEmpty().ifEmpty { if(episodes>0) "全 $episodes 集" else "" },
+                (0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
+        }
+        return valid(rows).filter { Seasons.matchesQuery(query,it.title) }
     }
     private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))
     fun searchSuggestRaw(keyword: String): String {

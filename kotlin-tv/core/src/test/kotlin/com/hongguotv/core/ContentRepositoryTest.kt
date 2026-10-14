@@ -259,9 +259,9 @@ class ContentRepositoryTest {
         assertFalse(result.hasMore)
     }
 
-    private fun searchTab(type: Int,id: String) = JSONObject().put("tab_type",type).put("has_more",true)
+    private fun searchTab(type: Int,id: String,title: String="修仙测试剧集") = JSONObject().put("tab_type",type).put("has_more",true)
         .put("data",JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject()
-            .put("series_id",id).put("title","测试剧集").put("episode_cnt",8)))))
+            .put("series_id",id).put("title",title).put("episode_cnt",8)))))
 
     @Test fun comicSearchRequestsAndSelectsOnlyComicTab() {
         var requests=0
@@ -288,7 +288,7 @@ class ContentRepositoryTest {
         var requests=0
         val repo=repository { requests++
             if(requests==1) """{"code":0,"search_tabs":[{"tab_type":11,"data":[]}]}"""
-            else """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"789","series_name":"测试漫剧"}]}}}};</script>"""
+            else """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"789","series_name":"修仙漫剧"}]}}}};</script>"""
         }
         assertEquals("789",repo.search("修仙",1,ContentType.COMIC).items.single().id)
         assertEquals(2,requests)
@@ -314,7 +314,7 @@ class ContentRepositoryTest {
                     """{"suggest_list":[{"name":"我合成了全世界"}]}"""
                 request.url.queryParameter("query") == "WHCLQSJ" ->
                     """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false}]}"""
-                else -> """{"code":0,"search_tabs":[${searchTab(11,"321")}]}"""
+                else -> """{"code":0,"search_tabs":[${searchTab(11,"321","我合成了全世界")}]}"""
             }
         }
         assertEquals("321",repo.search("WHCLQSJ",1,ContentType.SHORT).items.single().id)
@@ -341,5 +341,27 @@ class ContentRepositoryTest {
         }
         assertEquals("789",repo.search("漫剧",1,ContentType.COMIC).items.single().id)
         assertEquals(2,paths.size)
+    }
+
+    @Test fun chineseQueryDropsUnrelatedTitles() {
+        val repo=repository { request ->
+            JSONObject().put("code",0).put("search_tabs",JSONArray().put(JSONObject().put("tab_type",11).put("has_more",false)
+                .put("data",JSONArray()
+                    .put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","1").put("title","万妖图录传第八季").put("episode_cnt",109))))
+                    .put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","2").put("title","重生之我在后宫当妃子").put("episode_cnt",16)))))))
+                .toString()
+        }
+        assertEquals(listOf("1"),repo.search("万妖图录传",1,ContentType.SHORT).items.map { it.id })
+    }
+
+    @Test fun searchAllMergesSeasonsTheAppIndexMisses() {
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion"))
+                """{"suggest_list":[{"name":"万妖图录传第二季","keyword":"222","video_data":{"series_intro":"明月","episode_right_text":"全53集"}},{"name":"万妖图录传AI真人版","keyword":"10_abc"}]}"""
+            else """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false},{"tab_type":19,"data":[],"has_more":false}]}"""
+        }
+        val items=repo.searchAll("万妖图录传",1).items
+        assertEquals(listOf("222"),items.map { it.id })
+        assertEquals("全53集",items.single().badge)
     }
 }
