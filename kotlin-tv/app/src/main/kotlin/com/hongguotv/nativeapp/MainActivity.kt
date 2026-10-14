@@ -1294,20 +1294,40 @@ class MainActivity: Activity() {
         if(BuildConfig.CHANNEL!="phone" || screen!="player") { playEpisode(next); return }
         val pv=playerView
         val h=(root.height.takeIf { it>0 } ?: resources.displayMetrics.heightPixels).toFloat()
-        val shot=(pv?.videoSurfaceView as? android.view.TextureView)?.let { runCatching { it.bitmap }.getOrNull() }
+        // SurfaceView keeps the last frame for the slide, but only PixelCopy can read it back.
+        (pv?.videoSurfaceView as? android.view.SurfaceView)?.let { view -> requestSurfaceFrame(view) { shot -> slideShot(shot,direction,h) } }
         playEpisode(next)
         playerPlaceholder?.let { it.translationY=0f; it.visibility=View.VISIBLE; loadCover(it,data.series.cover) }
-        if(shot!=null) {
-            val overlay=ImageView(this).apply { setImageBitmap(shot); scaleType=ImageView.ScaleType.FIT_XY }
-            root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
-            overlay.animate().translationY(if(direction>0) -h else h).setDuration(240)
-                .setInterpolator(android.view.animation.DecelerateInterpolator())
-                .withEndAction { root.removeView(overlay) }.start()
-        }
         pv?.let { view ->
             view.translationY=if(direction>0) h else -h
             view.animate().translationY(0f).setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
         }
+    }
+    /** Copies the SurfaceView's last frame on the main thread; silently gives up when the platform cannot. */
+    private fun requestSurfaceFrame(view: android.view.SurfaceView,onFrame: (android.graphics.Bitmap) -> Unit) {
+        if(android.os.Build.VERSION.SDK_INT<24 || view.width<=0 || view.height<=0 || !view.holder.surface.isValid) return
+        val frame=runCatching { android.graphics.Bitmap.createBitmap(view.width,view.height,android.graphics.Bitmap.Config.ARGB_8888) }.getOrNull() ?: return
+        runCatching {
+            android.view.PixelCopy.request(view,frame,{ result ->
+                if(result==android.view.PixelCopy.SUCCESS && !blankFrame(frame)) onFrame(frame) else frame.recycle()
+            },main)
+        }.onFailure { frame.recycle() }
+    }
+    /** Sample the copy so a failed or black read never covers the slide with a black card. */
+    private fun blankFrame(frame: android.graphics.Bitmap): Boolean {
+        for(y in 1..8) for(x in 1..8) {
+            val pixel=frame.getPixel(frame.width*x/9,frame.height*y/9)
+            if(Color.alpha(pixel)!=0 && pixel!=Color.BLACK) return false
+        }
+        return true
+    }
+    private fun slideShot(frame: android.graphics.Bitmap,direction: Int,h: Float) {
+        if(screen!="player" || isFinishing) { frame.recycle(); return }
+        val overlay=ImageView(this).apply { setImageBitmap(frame); scaleType=ImageView.ScaleType.FIT_XY }
+        root.addView(overlay,FrameLayout.LayoutParams(-1,-1))
+        overlay.animate().translationY(if(direction>0) -h else h).setDuration(240)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withEndAction { root.removeView(overlay); overlay.setImageDrawable(null); frame.recycle() }.start()
     }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false) {
         updater.interrupt()
