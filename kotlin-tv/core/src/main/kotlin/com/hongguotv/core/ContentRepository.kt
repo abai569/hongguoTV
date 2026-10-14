@@ -188,11 +188,12 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     fun stream(id: String, maxQuality: Int = 1080, allowHevc: Boolean = true): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val biz="""{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024}"""
-        // Preload endpoint first, then the legacy endpoint (often carries an H.264 fallback_api the preload omits).
-        val preloadBody="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",preloadBody,id),maxQuality,allowHevc)?.let { return it }
+        // Match the desktop client: the legacy endpoint and its fallback_api are the primary App source.
         val legacyBody="""{"biz_param":$biz,"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
         streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",legacyBody,id),maxQuality,allowHevc)?.let { return it }
+        // The preload endpoint remains a fallback for responses where the legacy endpoint is unavailable.
+        val preloadBody="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
+        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",preloadBody,id),maxQuality,allowHevc)?.let { return it }
         // Website public MP4 (plain H.264, low resolution): also used when the play API is unavailable.
         val publicUrl="https://hongguoduanju.com/video/public/$id/360p.mp4"
         val ok=runCatching { RequestScope.execute(http.newCall(Request.Builder().url(publicUrl).header("Range","bytes=0-1").header("User-Agent",VendorConstants.VIDEO_UA).build())) { it.isSuccessful } }.getOrDefault(false)

@@ -195,8 +195,14 @@ class Library(context: Context) {
         get() = state().settings.danmaku
         set(value) { if (value != danmakuEnabled) { state().settings = state().settings.copy(danmaku = value); put("danmaku", value) } }
     var hevcDisabled: Boolean
-        get() = state().settings.disableHevc
-        set(value) { if (value != hevcDisabled) { state().settings = state().settings.copy(disableHevc = value); put("disableHevc", value) } }
+        get() = state().settings.disableHevc && prefs.getBoolean("disableHevcConfigured", false)
+        set(value) {
+            if (value != hevcDisabled) {
+                state().settings = state().settings.copy(disableHevc = value)
+                put("disableHevc", value)
+                put("disableHevcConfigured", true)
+            }
+        }
     fun snapshot() = state().snapshot()
     fun restore(incoming: BackupData, restoreSettings: Boolean) {
         val merged = LibraryBackup.merge(snapshot(), incoming, restoreSettings)

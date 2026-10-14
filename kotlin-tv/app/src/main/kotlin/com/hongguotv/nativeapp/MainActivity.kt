@@ -1002,9 +1002,9 @@ class MainActivity: Activity() {
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
         lateinit var hevcButton: TextView
-        hevcButton=setting(playback,"解码  ·  ${if(library.hevcDisabled) "仅 H.264（兼容）" else "自动（含 HEVC）"}") {
+        hevcButton=setting(playback,"HEVC 硬解码  ·  ${if(library.hevcDisabled) "关闭" else "开启"}") {
             library.hevcDisabled=!library.hevcDisabled
-            hevcButton.text="解码  ·  ${if(library.hevcDisabled) "仅 H.264（兼容）" else "自动（含 HEVC）"}"
+            hevcButton.text="HEVC 硬解码  ·  ${if(library.hevcDisabled) "关闭" else "开启"}"
         }
         val exportBtn=setting(device,"导出备份到本地") { exportBackup() }
         val importBtn=setting(device,"从本地文件恢复") { importBackup() }
@@ -1700,16 +1700,17 @@ class MainActivity: Activity() {
         seasons=addButton(transport,"其他季") { findOtherSeasons(seasons,true) }
         lateinit var more: TextView
         more=addButton(transport,"播放设置") {
-            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
+            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","HEVC 硬解码 ${if(library.hevcDisabled) "关" else "开"}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
                         0 -> showSpeedPicker(more)
                         1 -> showQualityPicker(more,true)
                         2 -> showFramePicker(more,true)
-                        3 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
-                        4 -> showSleepPicker(more)
-                        5 -> { seekTo(0); hidePanel() }
-                        6 -> findOtherSeasons(more,true)
+                        3 -> { library.hevcDisabled=!library.hevcDisabled; more.text="播放设置"; showPanel() }
+                        4 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
+                        5 -> showSleepPicker(more)
+                        6 -> { seekTo(0); hidePanel() }
+                        7 -> findOtherSeasons(more,true)
                     }
                 }
             })
