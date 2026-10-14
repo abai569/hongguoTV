@@ -586,7 +586,7 @@ class MainActivity: Activity() {
                 keyboard?.setText(searchDraft)
                 val rightTarget=host.getChildAt(0)?.id ?: View.NO_ID
                 keyboard?.linkRight(rightTarget)
-                val historyTarget=historyFlow?.let { if(it.childCount>0) it.getChildAt(0).id else View.NO_ID } ?: View.NO_ID
+                val historyTarget=(historyFlow as? ViewGroup)?.getChildAt(0)?.id ?: View.NO_ID
                 if(historyTarget!=View.NO_ID) { input.nextFocusLeftId=historyTarget; keyboard?.linkLeft(historyTarget) }
                 input.nextFocusRightId=rightTarget
                 input.nextFocusUpId=nav[tab].id; input.nextFocusDownId=keyboard?.firstKeyId ?: View.NO_ID
