@@ -1844,8 +1844,8 @@ class MainActivity: Activity() {
                         KeyEvent.KEYCODE_DPAD_LEFT -> seek(-1,event.repeatCount)
                         KeyEvent.KEYCODE_DPAD_RIGHT -> seek(1,event.repeatCount)
                         KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER -> if(event.repeatCount==0) togglePlayback()
-                        KeyEvent.KEYCODE_DPAD_DOWN -> if(event.repeatCount==0) showEpisodePanel(hud)
-                        KeyEvent.KEYCODE_DPAD_UP,KeyEvent.KEYCODE_MENU -> if(event.repeatCount==0) showPanel()
+                        KeyEvent.KEYCODE_DPAD_UP -> if(event.repeatCount==0) showEpisodePanel(hud)
+                        KeyEvent.KEYCODE_DPAD_DOWN,KeyEvent.KEYCODE_MENU -> if(event.repeatCount==0) showPanel()
                         else -> showHud()
                     }
                     return true
