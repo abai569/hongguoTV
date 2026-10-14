@@ -143,7 +143,7 @@ class MainActivity: Activity() {
         if(foreground && screen=="player" && playError && autoRecovery) {
             if(!networkAvailable()) scheduleRecovery()
             else if(recovery.consume()) {
-                android.util.Log.i("HongguoTV","Automatic playback recovery ${recovery.attempts}/3 at ${retryPosition}ms")
+                android.util.Log.i("HongguoTV","Automatic playback recovery ${recovery.attempts}/${com.hongguotv.core.RecoveryBudget.maxAttempts} at ${retryPosition}ms")
                 playEpisode(episodeIndex,retryPosition,retryAutoplay,recovering=true)
             }
         }
@@ -152,6 +152,7 @@ class MainActivity: Activity() {
     private var generation=0
     private var screen="catalog"
     private var lastStreamDebug=""
+    private var lastDanmakuDebug=""
     private var forceH264=false
     private val hevcSupported by lazy {
         runCatching {
@@ -1014,10 +1015,16 @@ class MainActivity: Activity() {
             cm.setPrimaryClip(android.content.ClipData.newPlainText("stream_debug",lastStreamDebug))
             Toast.makeText(this,"已复制全部JSON到剪贴板",Toast.LENGTH_LONG).show()
         }
+        val danmakuDebugBtn=setting(device,"调试 · 弹幕信息") {
+            if(lastDanmakuDebug.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return@setting }
+            val cm=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("danmaku_debug",lastDanmakuDebug))
+            Toast.makeText(this,"已复制弹幕JSON到剪贴板",Toast.LENGTH_LONG).show()
+        }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,license)
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
         if(BuildConfig.CHANNEL=="phone") {
             (left+right).forEachIndexed { index,view ->
                 view.nextFocusUpId=(left+right).getOrNull(index-1)?.id ?: nav[tab].id
@@ -1436,7 +1443,7 @@ class MainActivity: Activity() {
             if(library.danmakuEnabled) {
                 danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
                 work({ repository.fetchDanmakuWindow(remote.info.episodeId,0,remote.info.durationMs) }, { arr ->
-                    if(arr.length()>0) danmakuView?.appendData(arr)
+                    if(arr.length()>0) { lastDanmakuDebug=arr.toString(); danmakuView?.appendData(arr) }
                 }, {})
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
@@ -1554,10 +1561,10 @@ class MainActivity: Activity() {
     private fun cancelRecovery() { main.removeCallbacks(retryRunnable); retryPending=false; autoRecovery=false }
     private fun scheduleRecovery() {
         if(!foreground || !playError || !autoRecovery || retryPending) return
-        if(!recovery.remaining) { autoRecovery=false; playbackText.text="已自动重试 3 次，仍无法播放。可手动重试或切换清晰度。"; return }
+        if(!recovery.remaining) { autoRecovery=false; playbackText.text="已自动重试 ${com.hongguotv.core.RecoveryBudget.maxAttempts} 次，仍无法播放。可手动重试或切换清晰度。"; return }
         if(!networkAvailable()) { playbackText.text="网络已断开，联网后自动续播 · 第 ${episodeIndex+1} 集 ${formatTime(retryPosition)}"; return }
         val delay=recovery.delayMillis ?: return
-        playbackText.text="${if(retryAutoplay) "准备恢复播放" else "准备恢复暂停位置"} · ${delay/1000f} 秒后重试 ${recovery.attempts+1}/3 · ${formatTime(retryPosition)}"
+        playbackText.text="${if(retryAutoplay) "准备恢复播放" else "准备恢复暂停位置"} · ${delay/1000f} 秒后重试 ${recovery.attempts+1}/${com.hongguotv.core.RecoveryBudget.maxAttempts} · ${formatTime(retryPosition)}"
         retryPending=true; main.postDelayed(retryRunnable,delay)
     }
     private fun playerFailure(problem: Throwable) {
@@ -1944,7 +1951,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
     private val active=mutableListOf<Dm>()
     private val seen=mutableSetOf<String>()
     private val paint=android.graphics.Paint().apply { color=android.graphics.Color.WHITE; textSize=42f; isAntiAlias=true; typeface=android.graphics.Typeface.DEFAULT; setShadowLayer(4f,2f,2f,android.graphics.Color.BLACK) }
-    private var lastPos=0L; private var started=false
+    private var lastPos=0L; private var started=false; private var nextReleaseAt=0L
     fun setData(raw: org.json.JSONArray) {
         pending.clear(); active.clear()
         for(i in 0 until raw.length()) {
@@ -1975,8 +1982,11 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             var timeMs=0L
             val expand=commentObj.optJSONObject("expand")
             if(expand!=null) timeMs=expand.optLong("offset_time",expand.optLong("offset",0L))
-            val key=commentObj.optString("comment_id").ifEmpty { "$timeMs|$processed" }
-            if(!seen.add(key)) continue
+            val id=commentObj.optString("comment_id")
+            val textKey="t:$timeMs|$processed"
+            val idKey=if(id.isEmpty()) null else "i:$id"
+            if(seen.contains(textKey) || (idKey!=null && seen.contains(idKey))) continue
+            seen.add(textKey); if(idKey!=null) seen.add(idKey)
             pending.add(Dm(timeMs,processed))
         }
         pending.sortBy { it.time }
@@ -1994,7 +2004,7 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
             android.view.Choreographer.getInstance().postFrameCallback(this)
         }
     }
-    fun start() { started=true; lastNanos=0L; lastKnownPos=-1L; lastPos=0; pending.clear(); active.clear(); seen.clear(); android.view.Choreographer.getInstance().postFrameCallback(frameCallback) }
+    fun start() { started=true; lastNanos=0L; lastKnownPos=-1L; lastPos=0; nextReleaseAt=0L; pending.clear(); active.clear(); seen.clear(); android.view.Choreographer.getInstance().postFrameCallback(frameCallback) }
     fun stop() { started=false; android.view.Choreographer.getInstance().removeFrameCallback(frameCallback) }
     private fun advance(dtMs: Float) {
         val w=width.toFloat(); val h=height.toFloat()
@@ -2007,11 +2017,18 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
         val speed=w/TRAVEL_MS
         fun baseline(lane: Int)=top-fm.ascent+lane*lineHeight
         val currentPos=currentPosProvider?.invoke() ?: 0L
-        val playing=lastKnownPos<0L || currentPos!=lastKnownPos
+        val wasUnknown=lastKnownPos<0L
+        val jump=if(wasUnknown) 0L else currentPos-lastKnownPos
+        if(wasUnknown) nextReleaseAt=0L
+        if(!wasUnknown && (jump>2000L || jump<-2000L)) {
+            while(pending.isNotEmpty() && pending[0].time<currentPos-1500L) pending.removeAt(0)
+            nextReleaseAt=0L
+        }
+        val playing=wasUnknown || jump!=0L
         lastKnownPos=currentPos
         if(pending.isNotEmpty()) {
-            while(pending.isNotEmpty() && pending[0].time<=currentPos) {
-                val dm=pending.removeAt(0)
+            while(pending.isNotEmpty() && pending[0].time<=currentPos && currentPos>=nextReleaseAt) {
+                val dm=pending[0]
                 val textW=paint.measureText(dm.text)
                 // A lane is free only after its newest danmaku has fully entered the screen.
                 var chosen=-1
@@ -2019,9 +2036,11 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
                     val occupied=active.any { it.lane==lane && it.x+it.width>=w }
                     if(!occupied) { chosen=lane; break }
                 }
-                if(chosen<0) continue
+                if(chosen<0) break
+                pending.removeAt(0)
                 dm.x=w; dm.y=baseline(chosen); dm.width=textW; dm.lane=chosen; dm.speed=speed
                 active.add(dm)
+                nextReleaseAt=currentPos+RELEASE_GAP_MS
             }
             lastPos=currentPos
         }
@@ -2039,6 +2058,6 @@ private class DanmakuView(context: android.content.Context): android.view.View(c
         super.onDraw(canvas)
         for(dm in active) canvas.drawText(dm.text,dm.x,dm.y,paint)
     }
-    private companion object { const val BAND=0.30f; const val TRAVEL_MS=8600f }
+    private companion object { const val BAND=0.30f; const val TRAVEL_MS=8600f; const val RELEASE_GAP_MS=120L }
     var currentPosProvider: (()->Long)?=null
 }

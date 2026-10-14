@@ -11,10 +11,14 @@ object PlaybackQuality {
 /** One automatic recovery budget per episode; only an explicit user retry resets it. */
 class RecoveryBudget {
     var attempts=0; private set
-    val remaining get()=attempts<3
-    val delayMillis get()=listOf(1000L,2500L,5000L).getOrNull(attempts)
+    val remaining get()=attempts<maxAttempts
+    val delayMillis get()=delays.getOrNull(attempts)
     fun consume(): Boolean { if(!remaining) return false; attempts++; return true }
     fun reset() { attempts=0 }
+    companion object {
+        const val maxAttempts=5
+        private val delays=listOf(1000L,3000L,8000L,20000L,45000L)
+    }
 }
 
 data class ResumeTarget(val index: Int,val position: Long)

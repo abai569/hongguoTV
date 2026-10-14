@@ -14,7 +14,7 @@ class SignerTest {
             assertEquals("hash $i",row.getString("hash"),signer.hashF13(sm3(query.toByteArray()),body?.let{digest("MD5",it)}?:ByteArray(16),ts).hex())
             assertEquals("gorgon $i",row.getString("gorgon"),signer.gorgon(query,body,ts,42131))
             assertEquals("helios $i",row.getString("helios"),signer.helios(ts))
-            assertEquals("medusa $i",row.getString("medusa"),signer.medusa(url,body,ts))
+            assertEquals("medusa $i",row.getString("medusa"),signer.medusa(url,body,ts,VendorConstants.device.getValue("device_id")))
         }
     }
 }

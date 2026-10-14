@@ -39,10 +39,12 @@ class WatchingTest {
     @Test fun `automatic recovery is bounded until the user starts a new attempt`() {
         val budget=RecoveryBudget()
         assertEquals(1000L,budget.delayMillis); assertTrue(budget.consume())
-        assertEquals(2500L,budget.delayMillis); assertTrue(budget.consume())
-        assertEquals(5000L,budget.delayMillis); assertTrue(budget.consume())
+        assertEquals(3000L,budget.delayMillis); assertTrue(budget.consume())
+        assertEquals(8000L,budget.delayMillis); assertTrue(budget.consume())
+        assertEquals(20000L,budget.delayMillis); assertTrue(budget.consume())
+        assertEquals(45000L,budget.delayMillis); assertTrue(budget.consume())
         repeat(10) { assertFalse(budget.consume()); assertNull(budget.delayMillis) }
-        assertEquals(3,budget.attempts)
+        assertEquals(5,budget.attempts)
         budget.reset(); assertEquals(1000L,budget.delayMillis); assertTrue(budget.consume())
     }
     @Test fun `legacy global defaults stay valid and invalid values have safe defaults`() {
