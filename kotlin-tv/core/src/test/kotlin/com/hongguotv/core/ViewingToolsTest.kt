@@ -9,14 +9,14 @@ class ViewingToolsTest {
         for(value in listOf("0","537","-1","1.5","1e2","999999999999999","")) assertNull(value,EpisodeTarget.parse(value,536))
         assertNull(EpisodeTarget.parse("1",0)); assertEquals(103,EpisodeTarget.parse(" 0104 ",536))
     }
-    @Test fun `search history is bounded deduplicated and keeps content types distinct`() {
+    @Test fun `search history is bounded and deduplicated by query keeping the latest content type`() {
         var rows=emptyList<RecentSearch>()
         repeat(30) { rows=SearchHistory.remember(rows,"词$it",ContentType.COMIC) }
         assertEquals(20,rows.size); assertEquals("词29",rows.first().query)
         rows=SearchHistory.remember(rows," 词15 ",ContentType.COMIC)
         assertEquals("词15",rows.first().query); assertEquals(1,rows.count { it.query=="词15" })
         rows=SearchHistory.remember(rows,"词15",ContentType.SHORT)
-        assertEquals(2,rows.count { it.query=="词15" }); assertEquals(ContentType.SHORT,rows.first().type)
+        assertEquals(1,rows.count { it.query=="词15" }); assertEquals(ContentType.SHORT,rows.first().type)
         assertEquals(rows,SearchHistory.decode(SearchHistory.encode(rows)))
         assertEquals(rows,SearchHistory.remember(rows," ",ContentType.COMIC))
         assertEquals(rows,SearchHistory.remember(rows,"x".repeat(81),ContentType.COMIC))

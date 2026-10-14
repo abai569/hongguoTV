@@ -11,7 +11,7 @@ object SearchHistory {
         val clean=query.trim()
         if(clean.isEmpty() || clean.length>80) return existing
         val entry=RecentSearch(clean,type)
-        return (listOf(entry)+existing.filterNot { it==entry }).take(20)
+        return (listOf(entry)+existing.filterNot { it.query==clean }).take(20)
     }
     fun decode(value: String): List<RecentSearch> = runCatching {
         val rows=JSONArray(value)
@@ -20,7 +20,7 @@ object SearchHistory {
             val query=row.optString("query").trim()
             val type=ContentType.entries.firstOrNull { it.storedValue==row.optString("type") }
             if(query.isEmpty() || query.length>80 || type==null) null else RecentSearch(query,type)
-        }.distinct().take(20)
+        }.distinctBy { it.query }.take(20)
     }.getOrDefault(emptyList())
     fun encode(rows: List<RecentSearch>) = JSONArray(rows.map { JSONObject().put("query",it.query).put("type",it.type.storedValue) }).toString()
 }

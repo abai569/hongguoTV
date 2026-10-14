@@ -528,14 +528,14 @@ class MainActivity: Activity() {
         } else if(tab==1) {
             if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
             if(hotKeywords.isEmpty()) hotKeywords=RankType.entries.flatMap { type -> library.cachedRank(type)?.items.orEmpty() }.map { it.title }.filter { it.isNotBlank() }.distinct().take(15)
-            val keywordRow=row().apply { setPadding(dp(2),0,0,dp(10)) }
+            val keywordRow=row().apply { setPadding(dp(2),0,0,if(phone) dp(10) else 0) }
             val input=EditText(this).apply {
                 id=View.generateViewId(); hint="请输入剧名或关键词"; setText(searchDraft); setSelection(text.length)
                 textSize=20f; setTextColor(white); setHintTextColor(muted); isSingleLine=true; maxLines=1
                 filters=arrayOf(android.text.InputFilter.LengthFilter(80)); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
                 setPadding(dp(12),dp(8),dp(12),dp(8)); background=rounded(TvStyle.surface,TvStyle.outline)
             }
-            keywordRow.addView(input,lp(0,dp(if(phone) 48 else 46)).apply { weight=1f })
+            keywordRow.addView(input,lp(0,dp(if(phone) 48 else 42)).apply { weight=1f })
             searchKeyword=input
             var syncingText=false
             var keyboard: SearchKeyboard?=null
@@ -558,14 +558,16 @@ class MainActivity: Activity() {
             })
             input.setOnEditorActionListener { _,_,_-> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(::runSearch); true }
             val history=library.searches()
-            historyTitle=text("历史",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),0,0,dp(8)) }
-            recommendTitle=text("热搜",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); setPadding(dp(2),if(phone) dp(16) else 0,0,dp(8)) }
+            historyTitle=text("历史",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),0,0,if(phone) dp(8) else 0) }
+            recommendTitle=text("热搜",if(phone) 17f else 20f).apply { setTypeface(null,Typeface.BOLD); gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),if(phone) dp(16) else 0,0,if(phone) dp(8) else 0) }
+            val headerH=if(phone) LinearLayout.LayoutParams.WRAP_CONTENT else dp(42)
+            val headerBottom=if(phone) 0 else dp(10)
             val host=column(); recommendHost=host
             val historyCol=column()
-            historyCol.addView(historyTitle)
-            historyFlow=if(history.isEmpty()) { historyCol.addView(text("暂无搜索历史",13f,muted)); null } else addChips(historyCol,history.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard?.setText(it.query); runSearch(it.query,it.type) } })
+            historyCol.addView(historyTitle,lp(-1,headerH).apply { bottomMargin=headerBottom })
+            historyFlow=if(history.isEmpty()) { historyCol.addView(text("暂无搜索历史",13f,muted)); null } else addChips(historyCol,history.distinctBy { it.query }.take(8).map { it.query to { searchDraft=it.query; input.setText(it.query); keyboard?.setText(it.query); runSearch(it.query,it.type) } })
             val suggestCol=column()
-            suggestCol.addView(recommendTitle)
+            suggestCol.addView(recommendTitle,lp(-1,headerH).apply { bottomMargin=headerBottom })
             suggestCol.addView(host)
             fillRecommend(host,hotKeywords,"暂无推荐")
             if(phone) {
@@ -578,7 +580,7 @@ class MainActivity: Activity() {
             } else {
                 val area=row()
                 area.addView(historyCol,lp(0,-1).apply { weight=0.2f; rightMargin=dp(20) })
-                val midCol=column(); midCol.addView(keywordRow); keyboard?.let { midCol.addView(it,lp(-1,-2)) }
+                val midCol=column(); midCol.addView(keywordRow,lp(-1,headerH).apply { bottomMargin=headerBottom }); keyboard?.let { midCol.addView(it,lp(-1,-2)) }
                 area.addView(midCol,lp(0,-1).apply { weight=0.38f; rightMargin=dp(20) })
                 val rightScroll=ScrollView(this).apply { isVerticalScrollBarEnabled=false; clipToPadding=false }
                 rightScroll.addView(suggestCol); area.addView(rightScroll,lp(0,-1).apply { weight=0.42f })

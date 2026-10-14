@@ -73,8 +73,7 @@ class SearchKeyboard(
             keySize=size; val ts=keyTextFor(size)
             rows.forEach { r -> r.forEach { k -> k.layoutParams=LayoutParams(size,size).apply { marginEnd=gapX; topMargin=gapY }; k.textSize=ts } }
         }
-        val measuredW=if(wMode==MeasureSpec.EXACTLY) width else cols*keySize+gapX*(cols-1)
-        setMeasuredDimension(measuredW,rowN*(keySize+gapY))
+        super.onMeasure(widthMeasureSpec,heightMeasureSpec)
     }
 
     init {
