@@ -188,12 +188,17 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     fun stream(id: String, maxQuality: Int = 1080, allowHevc: Boolean = true): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val biz="""{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024}"""
-        // Match the desktop client: the legacy endpoint and its fallback_api are the primary App source.
+        val legacyUrl="https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/"
+        val preloadUrl="https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1"
         val legacyBody="""{"biz_param":$biz,"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",legacyBody,id),maxQuality,allowHevc)?.let { return it }
-        // The preload endpoint remains a fallback for responses where the legacy endpoint is unavailable.
         val preloadBody="""{"biz_param":$biz,"dr_scene":"preload","mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        streamFromModel(id,modelFrom("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/preload/v1",preloadBody,id),maxQuality,allowHevc)?.let { return it }
+        fun attempt(device: Map<String,String>): StreamInfo? =
+            streamFromModel(id,modelFrom(legacyUrl,legacyBody,id,device),maxQuality,allowHevc)
+                ?: streamFromModel(id,modelFrom(preloadUrl,preloadBody,id,device),maxQuality,allowHevc)
+        // Keep the stable device identity first (the identity that played without artifacts); only fall back
+        // to a fresh synthetic identity when the fixed one yields nothing (e.g. temporary throttling).
+        attempt(VendorConstants.device)?.let { return it }
+        attempt(freshDevice())?.let { return it }
         // Website public MP4 (plain H.264, low resolution): also used when the play API is unavailable.
         val publicUrl="https://hongguoduanju.com/video/public/$id/360p.mp4"
         val ok=runCatching { RequestScope.execute(http.newCall(Request.Builder().url(publicUrl).header("Range","bytes=0-1").header("User-Agent",VendorConstants.VIDEO_UA).build())) { it.isSuccessful } }.getOrDefault(false)
@@ -204,8 +209,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         }
         throw IOException("暂时无法获取播放地址，请稍后重试")
     }
-    private fun modelFrom(endpoint: String, body: ByteArray, id: String): JSONObject? = runCatching {
-        val signed=signer.sign(endpoint,freshDevice(),body)
+    private fun modelFrom(endpoint: String, body: ByteArray, id: String, device: Map<String,String>): JSONObject? = runCatching {
+        val signed=signer.sign(endpoint,device,body)
         val data=JSONObject(text(signed.url,signed))
         if(data.optInt("Code",data.optInt("code",0))!=0) return@runCatching null
         val map=data.optJSONObject("data") ?: return@runCatching null
@@ -285,7 +290,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     put("count",90); put("cursor",cursor); put("aid",8662); put("compliance_status",0)
                 }
                 val bodyBytes=bodyObj.toString().toByteArray()
-                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(episodeId,"UTF-8")}/v1/",freshDevice(),bodyBytes)
+                val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/commentapi/comment/list/${java.net.URLEncoder.encode(episodeId,"UTF-8")}/v1/",VendorConstants.device,bodyBytes)
                 val extraHeaders=signed.headers + mapOf("comment-source" to "601","server-channel" to "1000","x-ss-stub" to "")
                 val request=Request.Builder().url(signed.url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
                 extraHeaders.forEach { (k,v) -> request.header(k,v) }
