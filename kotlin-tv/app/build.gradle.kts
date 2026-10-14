@@ -11,8 +11,8 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 33
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 214
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.1.4"
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 215
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.1.5"
     }
     flavorDimensions += "form"
     productFlavors {

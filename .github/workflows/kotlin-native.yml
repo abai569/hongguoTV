@@ -42,11 +42,11 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=214
+          export HONGGUOTV_VERSION_CODE=215
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
-          ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintTvDebug :app:lintPhoneDebug :app:assembleDebug --console=plain
+          ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintTvDebug :app:lintPhoneDebug :app:assembleDebug :app:assembleRelease --console=plain
       - name: Prepare tagged APK
         if: startsWith(github.ref, 'refs/tags/kotlin-v')
         env:
@@ -59,8 +59,8 @@ jobs:
           phone_apk="juying-${version}-v8a.apk"
           echo "TV_APK=$tv_apk" >> "$GITHUB_ENV"
           echo "PHONE_APK=$phone_apk" >> "$GITHUB_ENV"
-          mv kotlin-tv/app/build/outputs/apk/tv/debug/app-tv-debug.apk "$tv_apk"
-          mv kotlin-tv/app/build/outputs/apk/phone/debug/app-phone-debug.apk "$phone_apk"
+          mv kotlin-tv/app/build/outputs/apk/tv/release/app-tv-release.apk "$tv_apk"
+          mv kotlin-tv/app/build/outputs/apk/phone/release/app-phone-release.apk "$phone_apk"
           tv_size=$(stat -c%s "$tv_apk"); tv_sha=$(sha256sum "$tv_apk" | awk '{print $1}')
           ph_size=$(stat -c%s "$phone_apk"); ph_sha=$(sha256sum "$phone_apk" | awk '{print $1}')
           min_sdk=$(grep -oE 'minSdk *= *[0-9]+' kotlin-tv/app/build.gradle.kts | grep -oE '[0-9]+' | head -n1)
@@ -123,3 +123,7 @@ jobs:
             kotlin-tv/app/build/reports/lint-results-phoneDebug.*
             kotlin-tv/app/build/outputs/apk/tv/debug/*.apk
             kotlin-tv/app/build/outputs/apk/phone/debug/*.apk
+            kotlin-tv/app/build/outputs/apk/tv/release/*.apk
+            kotlin-tv/app/build/outputs/apk/phone/release/*.apk
+            kotlin-tv/app/build/outputs/mapping/tvRelease/mapping.txt
+            kotlin-tv/app/build/outputs/mapping/phoneRelease/mapping.txt
