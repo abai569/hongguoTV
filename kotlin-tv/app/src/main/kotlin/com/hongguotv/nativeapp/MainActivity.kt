@@ -152,8 +152,9 @@ class MainActivity: Activity() {
     private var generation=0
     private var screen="catalog"
     private var lastStreamDebug=""
-    /** 最近一次播放的媒体格式，崩溃日志里带上它，方便定位老设备上的解码问题。 */
+    /** 最近一次播放的媒体格式与解码输出尺寸，崩溃日志/播放信息里带上它们，方便定位硬解花屏。 */
     private var playbackTrace=""
+    private var videoSizeText=""
     private var lastDanmakuDebug=""
     private var forceH264=false
     private val hevcSupported by lazy {
@@ -340,7 +341,7 @@ class MainActivity: Activity() {
         Thread.setDefaultUncaughtExceptionHandler { thread,problem ->
             runCatching {
                 val when_=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",java.util.Locale.US).format(java.util.Date())
-                val decoder=runCatching { if(library.hevcDisabled) "软解" else "硬解" }.getOrDefault("未知")
+                val decoder=runCatching { if(playbackSoftware()) "软解" else "硬解" }.getOrDefault("未知")
                 val text=buildString {
                     append("时间：").append(when_).append('\n')
                     append("设备：").append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL)
@@ -348,6 +349,7 @@ class MainActivity: Activity() {
                     append("版本：").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
                     append("解码方式：").append(decoder).append('\n')
                     if(playbackTrace.isNotEmpty()) append(playbackTrace).append('\n')
+                    if(videoSizeText.isNotEmpty()) append(videoSizeText).append('\n')
                     append("线程：").append(thread.name).append("\n\n")
                     append(android.util.Log.getStackTraceString(problem))
                 }
@@ -1018,7 +1020,8 @@ class MainActivity: Activity() {
         heading(playback,"播放偏好","所有剧集共用，播放中也可调整")
         heading(device,"片单与设备","保管记录，保持应用更新")
         lateinit var qualityButton: TextView
-        qualityButton=setting(playback,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
+        val qualityHint=if(library.softwareDecodeSafe) "${library.maxQuality}P" else "${library.maxQuality}P（本机最高 720P）"
+        qualityButton=setting(playback,"默认清晰度  ·  $qualityHint") { showQualityPicker(qualityButton,false) }
         lateinit var defaultSpeed: TextView
         defaultSpeed=setting(playback,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         lateinit var frame: TextView
@@ -1043,7 +1046,10 @@ class MainActivity: Activity() {
         }
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
-        val debugBtn=setting(device,"调试 · 播放信息") { showDebugDialog("播放信息 · 可拍照","stream_debug",lastStreamDebug) }
+        val debugBtn=setting(device,"调试 · 播放信息") {
+            val head=buildString { if(playbackTrace.isNotEmpty()) append(playbackTrace).append('\n'); if(videoSizeText.isNotEmpty()) append(videoSizeText).append('\n') }
+            showDebugDialog("播放信息 · 可拍照","stream_debug",if(head.isEmpty()) lastStreamDebug else head+"\n"+lastStreamDebug)
+        }
         val danmakuDebugBtn=setting(device,"调试 · 弹幕信息") { showDebugDialog("弹幕信息 · 可拍照","danmaku_debug",lastDanmakuDebug) }
         val crashFile=java.io.File(filesDir,"crash-last.txt")
         val crashBtn=setting(device,"调试 · 崩溃日志"+(if(crashFile.exists()) "  ·  有记录" else "")) {
@@ -1353,7 +1359,7 @@ class MainActivity: Activity() {
         val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError
         library.setWatched(data.series.id,false)
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
-        val prefetched=if(position==0L && !recovering) preparedNext.take("${data.episodes[selectedIndex]}:${library.maxQuality}") else null
+        val prefetched=if(position==0L && !recovering) preparedNext.take("${data.episodes[selectedIndex]}:${playbackQuality()}") else null
         val claimedHttp=if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
         saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews()
         if(reuse) {
@@ -1469,8 +1475,8 @@ class MainActivity: Activity() {
         playbackText.text="正在获取播放地址…"; progressBar.progress=0; progressBar.visibility=View.VISIBLE; hidePlaybackOverlay()
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
-        val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality,hevcSupported && !forceH264 && !library.hevcDisabled); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
+        val requestedId=data.episodes[episodeIndex]; val maxQuality=playbackQuality(); val ticket=generation
+        work({ prefetched ?: run { val s=repository.stream(requestedId,maxQuality,hevcSupported && !forceH264 && !playbackSoftware()); lastStreamDebug=s.debugRaw; RemoteVideo(repository.http,s).prepare() } }, { remote ->
             video=remote; quality=remote.info.quality
             if(library.danmakuEnabled) {
                 danmakuView?.visibility=View.VISIBLE; danmakuView?.start()
@@ -1488,7 +1494,7 @@ class MainActivity: Activity() {
                         val decoders: List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> = runCatching {
                             androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType,secure,tunneling)
                         }.getOrDefault(emptyList())
-                        val softwareHevc=library.hevcDisabled && mimeType.equals("video/hevc",true)
+                        val softwareHevc=playbackSoftware() && mimeType.equals("video/hevc",true)
                         if(softwareHevc) decoders.sortedBy { if(softwareCodec(it.name)) 0 else 1 } else decoders
                     }
                 ExoPlayer.Builder(this,renderers).setLoadControl(load).build().also {
@@ -1536,6 +1542,7 @@ class MainActivity: Activity() {
                 override fun onPlaybackParametersChanged(parameters: PlaybackParameters) { if(active()) syncMediaSession() }
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) syncMediaSession() }
                 override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                    videoSizeText="解码输出：${videoSize.width}x${videoSize.height} 像素宽高比=${videoSize.pixelWidthHeightRatio} 待旋转=${videoSize.unappliedRotationDegrees}"
                     if(!active() || videoSize.width<=0 || videoSize.height<=0) return
                     if(userOrientation!=null || orientationDecided) return
                     orientationDecided=true
@@ -1562,7 +1569,7 @@ class MainActivity: Activity() {
         val p=player ?: return; val data=detail ?: return
         if(!foreground || !p.isPlaying || !library.autoNext || playError || sleepStopped || episodeIndex>=data.episodes.lastIndex) return
         if(!PrefetchPolicy.nearEnd(p.currentPosition,p.duration,p.playbackParameters.speed)) return
-        val id=data.episodes[episodeIndex+1]; val quality=library.maxQuality; val key="$id:$quality"
+        val id=data.episodes[episodeIndex+1]; val quality=playbackQuality(); val key="$id:$quality"
         if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
         val now=android.os.SystemClock.elapsedRealtime()
         if(readySince==0L || now-readySince<3000 || p.bufferedPosition-p.currentPosition<5000) return
@@ -1576,7 +1583,7 @@ class MainActivity: Activity() {
             var remote: RemoteVideo?=null
             try {
                 val prepared=scope.run {
-                    RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !library.hevcDisabled)).also { remote=it; it.warm() }
+                    RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !playbackSoftware())).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
             } catch(_: Exception) { remote?.close() }
@@ -1585,7 +1592,7 @@ class MainActivity: Activity() {
     private fun prefetchEpisode(index: Int) {
         val data=detail ?: return
         val id=data.episodes.getOrNull(index) ?: return
-        val quality=library.maxQuality; val key="$id:$quality"
+        val quality=playbackQuality(); val key="$id:$quality"
         if(preparedNext.isFresh(key) || prefetchJob?.isDone==false) return
         if(connectivity.isActiveNetworkMetered || !networkAvailable()) return
         cancelPrefetch(); prefetchedFor=key
@@ -1596,7 +1603,7 @@ class MainActivity: Activity() {
         prefetchJob=prefetchWorker.submit {
             var remote: RemoteVideo?=null
             try {
-                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !library.hevcDisabled)).also { remote=it; it.warm() } }
+                val prepared=scope.run { RemoteVideo(http,source.stream(id,quality,hevcSupported && !forceH264 && !playbackSoftware())).also { remote=it; it.warm() } }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Episode prepared after opening detail")
             } catch(_: Exception) { remote?.close() }
         }
@@ -1632,7 +1639,8 @@ class MainActivity: Activity() {
         playbackText.text=if(decoding) "电视无法解码当前视频，可尝试更低清晰度。" else "播放失败，可重试或切换清晰度。"
         val actions=row(); addRow(controls,actions)
         addButton(actions,"立即重试") { playEpisode(episodeIndex,retryPosition,retryAutoplay) }.requestFocus()
-        addButton(actions,"尝试 720P") { library.maxQuality=720; playEpisode(episodeIndex,retryPosition,retryAutoplay) }
+        val lower=if(playbackQuality()>720) 720 else 480
+        addButton(actions,"尝试 ${lower}P") { library.maxQuality=lower; playEpisode(episodeIndex,retryPosition,retryAutoplay) }
         addButton(actions,"返回选集") { returnToDetail(true) }
         if(retryable && !sleepStopped) {
             addButton(controls,"停止自动重试") { cancelRecovery(); playbackText.text="自动重试已停止，观看位置已保留。" }
@@ -1712,19 +1720,40 @@ class MainActivity: Activity() {
         })
     }
     private fun softwareCodec(name: String)=name.startsWith("c2.android.")||name.startsWith("OMX.google.")
-    private fun decoderLabel()=if(library.hevcDisabled) "软解" else "硬解"
+    /** 1080P 必须软解（部分电视硬解 1080P 会花屏/崩），720P 及以下可以硬解；
+     *  不能软解的老设备（安卓 7 / 低内存）因此把清晰度压到 720P，避免软解闪退、1080P 又崩。 */
+    private fun playbackQuality()=if(library.softwareDecodeSafe) library.maxQuality else minOf(library.maxQuality,720)
+    /** 自动 = 1080P 软解、720P 及以下硬解；用户明确选过解码方式就以用户为准（方便自己试硬解 1080P）。 */
+    private fun playbackSoftware(): Boolean {
+        if(!library.softwareDecodeSafe) return false
+        if(library.decoderConfigured) return library.hevcDisabled
+        return playbackQuality()>=1080
+    }
+    private fun decoderLabel()=when {
+        !library.softwareDecodeSafe -> "硬解"
+        library.decoderConfigured -> if(library.hevcDisabled) "软解" else "硬解"
+        playbackSoftware() -> "自动 · 现在软解"
+        else -> "自动 · 现在硬解"
+    }
     /** 硬解 = 电视解码器直解 HEVC；软解 = 平台软件解码器，部分电视硬解会在画面上方出绿带。 */
     private fun showDecoderPicker(anchor: TextView,inPlayer: Boolean) {
-        val previous=library.hevcDisabled
+        val previous=playbackSoftware()
         val safe=library.softwareDecodeSafe
-        val softLabel=if(safe) "软解 · 平台软件解码器，画面干净；吃 CPU，老电视可能掉帧"
-            else "软解 · 本机不提供：安卓 7 / 低内存设备软解 HEVC 会闪退"
-        tvTools.choose("解码方式 · 当前 ${decoderLabel()}",listOf("硬解 · 电视解码器直接解 HEVC，省电流畅；部分电视画面上方出现绿色条带",softLabel),anchor,{ choice ->
-            if(choice==1 && !safe) Toast.makeText(this,"本机（安卓 ${android.os.Build.VERSION.RELEASE}）软解 HEVC 会闪退，继续使用硬解",Toast.LENGTH_LONG).show()
+        val labels=listOf(
+            "硬解 · 用电视解码器，省电流畅；部分电视硬解 1080P 会花屏",
+            if(safe) "软解 · 平台软件解码器，画面干净；吃 CPU，老电视可能掉帧"
+                else "软解 · 本机不提供：安卓 7 / 低内存设备软解 HEVC 会闪退（清晰度最高 720P）",
+            "自动 · 1080P 用软解、720P 及以下用硬解（推荐）")
+        tvTools.choose("解码方式 · 当前 ${decoderLabel()}",labels,anchor,{ choice ->
+            if(choice==1 && !safe) Toast.makeText(this,"本机（安卓 ${android.os.Build.VERSION.RELEASE}）软解 HEVC 会闪退，继续硬解并把清晰度限制在 720P",Toast.LENGTH_LONG).show()
             else {
-                library.hevcDisabled=choice==1
+                when(choice) {
+                    0 -> library.hevcDisabled=false
+                    1 -> library.hevcDisabled=true
+                    else -> library.useAutoDecoder()
+                }
                 if(anchor.tag!="playback-settings") anchor.text="解码方式  ·  ${decoderLabel()}"
-                if(inPlayer && library.hevcDisabled!=previous) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
+                if(inPlayer && playbackSoftware()!=previous) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
             }
         })
     }
@@ -1825,6 +1854,7 @@ class MainActivity: Activity() {
             .setSingleChoiceItems(options.map { "${it}P" }.toTypedArray(),options.indexOf(library.maxQuality)) { popup,index ->
                 val target=options[index]; val changed=library.maxQuality!=target
                 library.maxQuality=target; popup.dismiss()
+                if(!library.softwareDecodeSafe && target>720) Toast.makeText(this,"本机（安卓 7 / 低内存）不支持软解，实际按 720P 播放",Toast.LENGTH_LONG).show()
                 if(anchor.tag!="playback-settings") anchor.text=(if(inPlayer) "清晰度 " else "默认清晰度  ·  ")+"${target}P"
                 if(inPlayer && changed) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
             }.setNegativeButton("取消",null).create()

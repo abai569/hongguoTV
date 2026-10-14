@@ -200,6 +200,9 @@ class Library(context: Context) {
             !(app.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
         }.getOrDefault(false)
     }
+    /** 用户是否明确设置过解码方式；没设置过走「自动」：1080P 软解、720P 及以下硬解。 */
+    val decoderConfigured: Boolean get()=prefs.contains("disableHevc")
+    fun useAutoDecoder() { prefs.edit().remove("disableHevc").apply() }
     var hevcDisabled: Boolean
         get() = softwareDecodeSafe && state().settings.disableHevc
         set(value) {
