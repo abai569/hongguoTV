@@ -219,14 +219,17 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }.getOrNull()
     private fun codecRank(codec: String)=when(codec.lowercase()) { "h264","avc","avc1" -> 0; "bytevc2","bvc2" -> 3; "bytevc1","hvc1","hev1","hevc","h265" -> 2; else -> 1 }
     private fun <T> pickBest(rows: List<Triple<Int,T,JSONObject>>, maxQuality: Int, allowHevc: Boolean): Triple<Int,T,JSONObject>? {
-        val allowed=rows.filter { val r=codecRank(it.third.str("codec_type")); r!=3 && (allowHevc || r<2) }
+        val allowed=rows.filter { codecRank(it.third.str("codec_type"))!=3 }
+        val preferred=allowed.filter { allowHevc || codecRank(it.third.str("codec_type"))<2 }
+        val pool=preferred.ifEmpty { allowed }
         if(allowed.isEmpty()) return null
         // Compatibility first: prefer H.264/unknown over HEVC, then the highest quality within that codec.
-        val topRank=allowed.minOf { codecRank(it.third.str("codec_type")) }
-        val group=allowed.filter { codecRank(it.third.str("codec_type"))==topRank }.sortedByDescending { it.first }
+        val topRank=pool.minOf { codecRank(it.third.str("codec_type")) }
+        val group=pool.filter { codecRank(it.third.str("codec_type"))==topRank }.sortedByDescending { it.first }
         return group.firstOrNull { it.first<=maxQuality } ?: group.last()
     }
     private fun qualityLabel(q: Int, maxQuality: Int)=if(q>0) "${q}P"+(if(q>maxQuality) "（兼容资源）" else "") else "自动"
+    private fun codecNote(codec: String, allowHevc: Boolean)=if(!allowHevc && codecRank(codec)==2) "（HEVC 软解）" else ""
     private fun streamFromModel(id: String, model: JSONObject?, maxQuality: Int, allowHevc: Boolean): StreamInfo? {
         model ?: return null
         val durationMs=(model.optDouble("video_duration",0.0)*1000).toLong()
@@ -241,9 +244,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                 val item=chosen.second; val url=cleanUrl(item.str("main_url"))
                 if(url.startsWith("https://") || url.startsWith("http://")) {
                     val key=item.optJSONObject("encrypt_info")?.str("spade_a")?.takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-                    val result=StreamInfo(url,key,qualityLabel(chosen.first,maxQuality))
+                    val codec=chosen.third.str("codec_type")
+                    val result=StreamInfo(url,key,qualityLabel(chosen.first,maxQuality)+codecNote(codec,allowHevc))
                     result.debugRaw=model.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id; result.durationMs=durationMs
-                    result.codec=chosen.third.str("codec_type")
+                    result.codec=codec
                     return result
                 }
             }
@@ -261,10 +265,11 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                     if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
                     if(url.startsWith("https://") || url.startsWith("http://")) {
                         val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-                        val result=StreamInfo(url,key,qualityLabel(selected.first,maxQuality))
+                        val codec=item.str("codec_type")
+                        val result=StreamInfo(url,key,qualityLabel(selected.first,maxQuality)+codecNote(codec,allowHevc))
                         result.debugRaw=info.toString(); result.danmakuRaw=JSONArray(); result.episodeId=id
                         result.durationMs=(info.optDouble("video_duration",0.0)*1000).toLong()
-                        result.codec=item.str("codec_type")
+                        result.codec=codec
                         return result
                     }
                 }

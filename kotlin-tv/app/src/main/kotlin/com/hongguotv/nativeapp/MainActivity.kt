@@ -1002,9 +1002,9 @@ class MainActivity: Activity() {
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
         lateinit var hevcButton: TextView
-        hevcButton=setting(playback,"HEVC 硬解码  ·  ${if(library.hevcDisabled) "关闭" else "开启"}") {
+        hevcButton=setting(playback,hevcLabel()) {
             library.hevcDisabled=!library.hevcDisabled
-            hevcButton.text="HEVC 硬解码  ·  ${if(library.hevcDisabled) "关闭" else "开启"}"
+            hevcButton.text=hevcLabel()
         }
         val exportBtn=setting(device,"导出备份到本地") { exportBackup() }
         val importBtn=setting(device,"从本地文件恢复") { importBackup() }
@@ -1014,18 +1014,8 @@ class MainActivity: Activity() {
         }
         lateinit var updates: TextView
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
-        val debugBtn=setting(device,"调试 · 播放信息") {
-            if(lastStreamDebug.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return@setting }
-            val cm=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("stream_debug",lastStreamDebug))
-            Toast.makeText(this,"已复制全部JSON到剪贴板",Toast.LENGTH_LONG).show()
-        }
-        val danmakuDebugBtn=setting(device,"调试 · 弹幕信息") {
-            if(lastDanmakuDebug.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return@setting }
-            val cm=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("danmaku_debug",lastDanmakuDebug))
-            Toast.makeText(this,"已复制弹幕JSON到剪贴板",Toast.LENGTH_LONG).show()
-        }
+        val debugBtn=setting(device,"调试 · 播放信息") { showDebugDialog("播放信息 · 可拍照","stream_debug",lastStreamDebug) }
+        val danmakuDebugBtn=setting(device,"调试 · 弹幕信息") { showDebugDialog("弹幕信息 · 可拍照","danmaku_debug",lastDanmakuDebug) }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
@@ -1453,7 +1443,15 @@ class MainActivity: Activity() {
             } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
+                // The HEVC switch doubles as a decoder switch: with hardware HEVC off, HEVC sources go to the
+                // platform software decoder, which avoids the green strip some TV hardware decoders draw.
                 val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+                    .setMediaCodecSelector { mimeType,secure,tunneling ->
+                        val decoders: List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> =
+                            androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType,secure,tunneling)
+                        val softwareHevc=library.hevcDisabled && mimeType.equals("video/hevc",true)
+                        if(softwareHevc) decoders.sortedBy { if(softwareCodec(it.name)) 0 else 1 } else decoders
+                    }
                 ExoPlayer.Builder(this,renderers).setLoadControl(load).build().also {
                     player=it; playerView?.player=it
                     it.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
@@ -1669,6 +1667,8 @@ class MainActivity: Activity() {
             if(anchor.tag!="playback-settings") anchor.text="定时 ${sleepTimer.label()}"; updatePlaybackText(); showHud()
         })
     }
+    private fun softwareCodec(name: String)=name.startsWith("c2.android.")||name.startsWith("OMX.google.")
+    private fun hevcLabel()=if(library.hevcDisabled) "HEVC 硬解码  ·  关闭（软解）" else "HEVC 硬解码  ·  开启"
     private fun frameResizeMode()=when(library.frameMode) {
         VideoFrameMode.FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
         VideoFrameMode.ZOOM -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
@@ -1700,13 +1700,13 @@ class MainActivity: Activity() {
         seasons=addButton(transport,"其他季") { findOtherSeasons(seasons,true) }
         lateinit var more: TextView
         more=addButton(transport,"播放设置") {
-            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","HEVC 硬解码 ${if(library.hevcDisabled) "关" else "开"}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
+            tvTools.choose("播放设置",listOf("倍速 ${PlaybackSpeed.label(library.playbackSpeed)}","清晰度 ${library.maxQuality}P","画面 ${library.frameMode.label}","HEVC ${if(library.hevcDisabled) "软解" else "硬解"}","弹幕 ${if(library.danmakuEnabled) "开" else "关"}","定时 ${sleepTimer.label()}","从头播放","查找其他季"),more,{ choice ->
                 main.post {
                     if(screen=="player" && more.isAttachedToWindow) when(choice) {
                         0 -> showSpeedPicker(more)
                         1 -> showQualityPicker(more,true)
                         2 -> showFramePicker(more,true)
-                        3 -> { library.hevcDisabled=!library.hevcDisabled; more.text="播放设置"; showPanel() }
+                        3 -> { library.hevcDisabled=!library.hevcDisabled; more.text="播放设置"; playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay) }
                         4 -> { library.danmakuEnabled=!library.danmakuEnabled; if(library.danmakuEnabled) { danmakuView?.visibility=View.VISIBLE; danmakuView?.start() } else { danmakuView?.stop(); danmakuView?.visibility=View.GONE }; more.text="播放设置" }
                         5 -> showSleepPicker(more)
                         6 -> { seekTo(0); hidePanel() }
@@ -1717,6 +1717,29 @@ class MainActivity: Activity() {
         }.apply { tag="playback-settings" }
         if(BuildConfig.CHANNEL=="phone") addButton(transport,if(requestedOrientation==android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) "横屏" else "竖屏") { toggleOrientation(); showPanel() }
         transportPlay?.requestFocus()
+    }
+    /** Big monospace reader for debug payloads: phone can select or copy, TV reads it off the screen. */
+    private fun showDebugDialog(title: String,clipLabel: String,payload: String) {
+        if(payload.isEmpty()) { Toast.makeText(this,"先播放一集",Toast.LENGTH_LONG).show(); return }
+        val body=text(payload,if(isTvDevice) 15f else 12f).apply {
+            typeface=Typeface.MONOSPACE; setLineSpacing(dp(3).toFloat(),1.1f); setBackgroundColor(bg)
+            setTextIsSelectable(!isTvDevice); isFocusable=true; setPadding(dp(18),dp(12),dp(18),dp(20))
+        }
+        val content=column().apply {
+            addView(text("共 ${payload.length} 字 · "+if(isTvDevice) "遥控上下键翻页，看不清可直接拍照" else "可长按选字，或点「复制」",13f,muted).apply { setPadding(dp(18),dp(14),dp(18),dp(4)) })
+            addView(ScrollView(this@MainActivity).apply { addView(body); isVerticalScrollBarEnabled=true; setBackgroundColor(bg) },LinearLayout.LayoutParams(-1,0,1f))
+        }
+        val dialog=AlertDialog.Builder(this).setTitle(title).setView(content)
+            .setNegativeButton("关闭",null).setNeutralButton("复制",null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText(clipLabel,payload))
+                Toast.makeText(this,"已复制全部 JSON 到剪贴板",Toast.LENGTH_LONG).show()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).post { if(dialog.isShowing) dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus() }
+        }
+        dialog.show()
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels*.9f).toInt(),(resources.displayMetrics.heightPixels*.86f).toInt())
     }
     private fun showSpeedPicker(anchor: TextView,inPlayer: Boolean=true) {
         if(speedDialog!=null) return
