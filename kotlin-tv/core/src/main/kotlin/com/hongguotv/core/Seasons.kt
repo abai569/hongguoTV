@@ -11,7 +11,10 @@ object Seasons {
     private val marker=Regex("第([0-9一二三四五六七八九十百两零]+)[季部]")
     private val noise=Regex("[\\s·:：、,.。\\-—()（）\\[\\]【】!！?？\"'“”‘’]")
     private val trailingDigits=Regex("[0-9]+$")
+    private val numerals=listOf("一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十")
     fun norm(value: String)=value.replace(noise,"").lowercase()
+    /** 1 -> 一, 12 -> 十二; 超过 20 退回阿拉伯数字。补搜缺失季名时按已有剧名的写法挑一个。 */
+    fun numeral(number: Int)=numerals.getOrNull(number-1) ?: number.toString()
     /** 搜索命中判断：汉字查询要求标题里真的含这几个字（接口带纠错联想，容易混进无关剧）。 */
     fun matchesQuery(keyword: String,title: String): Boolean {
         val query=keyword.trim()

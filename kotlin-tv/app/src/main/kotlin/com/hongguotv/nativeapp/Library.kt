@@ -194,8 +194,14 @@ class Library(context: Context) {
     var danmakuEnabled: Boolean
         get() = state().settings.danmaku
         set(value) { if (value != danmakuEnabled) { state().settings = state().settings.copy(danmaku = value); put("danmaku", value) } }
+    /** 安卓 7 与低内存机顶盒软解 1080P HEVC 会吃爆内存并闪退：这类设备固定走硬解，设置里也不提供软解。 */
+    val softwareDecodeSafe: Boolean by lazy {
+        android.os.Build.VERSION.SDK_INT>=26 && runCatching {
+            !(app.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+        }.getOrDefault(false)
+    }
     var hevcDisabled: Boolean
-        get() = state().settings.disableHevc
+        get() = softwareDecodeSafe && state().settings.disableHevc
         set(value) {
             if (value != hevcDisabled) {
                 state().settings = state().settings.copy(disableHevc = value)

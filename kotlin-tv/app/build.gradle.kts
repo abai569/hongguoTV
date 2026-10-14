@@ -12,7 +12,7 @@ android {
         minSdk = 21
         targetSdk = 33
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 213
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.1.2"
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.1.3"
     }
     flavorDimensions += "form"
     productFlavors {

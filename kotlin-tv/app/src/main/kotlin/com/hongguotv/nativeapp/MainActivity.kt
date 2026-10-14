@@ -152,6 +152,8 @@ class MainActivity: Activity() {
     private var generation=0
     private var screen="catalog"
     private var lastStreamDebug=""
+    /** 最近一次播放的媒体格式，崩溃日志里带上它，方便定位老设备上的解码问题。 */
+    private var playbackTrace=""
     private var lastDanmakuDebug=""
     private var forceH264=false
     private val hevcSupported by lazy {
@@ -317,6 +319,7 @@ class MainActivity: Activity() {
     }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        installCrashLog()
         window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         library=Library(this); artwork=ArtworkLoader(this); tvTools=TvTools(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root)
         updater=AppUpdater(this) { foreground && library.isLoaded && screen=="catalog" && !tvTools.showing }
@@ -330,6 +333,28 @@ class MainActivity: Activity() {
         mediaSession=TvMediaSession(this,{ if(foreground && screen=="player") requestPlayback(true) },{ if(foreground && screen=="player") requestPlayback(false) },{ position -> if(foreground && screen=="player") seekTo(position) },{ direction -> skipEpisode(direction) },{ if(foreground && screen=="player") returnToDetail() })
         message(base(),"正在读取本机记录…")
         loadLibrary()
+    }
+    /** 记下最近一次未捕获异常：老设备闪退时，用户可以在设置 → 调试 · 崩溃日志里拍照发出来。 */
+    private fun installCrashLog() {
+        val previous=Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread,problem ->
+            runCatching {
+                val when_=java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",java.util.Locale.US).format(java.util.Date())
+                val decoder=runCatching { if(library.hevcDisabled) "软解" else "硬解" }.getOrDefault("未知")
+                val text=buildString {
+                    append("时间：").append(when_).append('\n')
+                    append("设备：").append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL)
+                    append(" · Android ").append(android.os.Build.VERSION.RELEASE).append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n")
+                    append("版本：").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
+                    append("解码方式：").append(decoder).append('\n')
+                    if(playbackTrace.isNotEmpty()) append(playbackTrace).append('\n')
+                    append("线程：").append(thread.name).append("\n\n")
+                    append(android.util.Log.getStackTraceString(problem))
+                }
+                java.io.File(filesDir,"crash-last.txt").writeText(text)
+            }
+            previous?.uncaughtException(thread,problem)
+        }
     }
     private fun showLibraryError(problem: Throwable) {
         val body=base(); error(body,problem) { message(base(),"正在读取本机记录…"); loadLibrary() }
@@ -1020,10 +1045,16 @@ class MainActivity: Activity() {
         updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         val debugBtn=setting(device,"调试 · 播放信息") { showDebugDialog("播放信息 · 可拍照","stream_debug",lastStreamDebug) }
         val danmakuDebugBtn=setting(device,"调试 · 弹幕信息") { showDebugDialog("弹幕信息 · 可拍照","danmaku_debug",lastDanmakuDebug) }
+        val crashFile=java.io.File(filesDir,"crash-last.txt")
+        val crashBtn=setting(device,"调试 · 崩溃日志"+(if(crashFile.exists()) "  ·  有记录" else "")) {
+            val file=java.io.File(filesDir,"crash-last.txt")
+            if(!file.exists()) { Toast.makeText(this,"没有崩溃记录",Toast.LENGTH_LONG).show(); return@setting }
+            showDebugDialog("崩溃日志 · 可拍照","crash_log",runCatching { file.readText() }.getOrDefault("读取失败"))
+        }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,decoderButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,license)
+        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,decoderButton); val right=listOf(exportBtn,importBtn,hidden,updates,debugBtn,danmakuDebugBtn,crashBtn,license)
         if(BuildConfig.CHANNEL=="phone") {
             (left+right).forEachIndexed { index,view ->
                 view.nextFocusUpId=(left+right).getOrNull(index-1)?.id ?: nav[tab].id
@@ -1453,8 +1484,10 @@ class MainActivity: Activity() {
                 // platform software decoder, which avoids the green strip some TV hardware decoders draw.
                 val renderers=androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true)
                     .setMediaCodecSelector { mimeType,secure,tunneling ->
-                        val decoders: List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> =
+                        // 个别老设备查询解码器会抛异常：退回空列表走 ExoPlayer 正常的「无解码器」失败流程，别把进程带走
+                        val decoders: List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> = runCatching {
                             androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType,secure,tunneling)
+                        }.getOrDefault(emptyList())
                         val softwareHevc=library.hevcDisabled && mimeType.equals("video/hevc",true)
                         if(softwareHevc) decoders.sortedBy { if(softwareCodec(it.name)) 0 else 1 } else decoders
                     }
@@ -1475,6 +1508,11 @@ class MainActivity: Activity() {
                             return
                         }
                         playbackReady=true
+                        runCatching {
+                            val group=p.currentTracks.groups.firstOrNull { it.type==C.TRACK_TYPE_VIDEO }
+                            val format=group?.let { g -> (0 until g.length).mapNotNull { i -> runCatching { g.getTrackFormat(i) }.getOrNull() }.firstOrNull() }
+                            if(format!=null) playbackTrace="媒体：${format.sampleMimeType ?: "?"} ${format.width}x${format.height} codecs=${format.codecs ?: "-"}"
+                        }
                         playerPlaceholder?.visibility=View.GONE; playerSpinner?.visibility=View.GONE
                         if(firstReady) { firstReady=false; readySince=android.os.SystemClock.elapsedRealtime(); android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}") }
                         if(hud.visibility==View.VISIBLE) updatePlaybackText()
@@ -1678,10 +1716,16 @@ class MainActivity: Activity() {
     /** 硬解 = 电视解码器直解 HEVC；软解 = 平台软件解码器，部分电视硬解会在画面上方出绿带。 */
     private fun showDecoderPicker(anchor: TextView,inPlayer: Boolean) {
         val previous=library.hevcDisabled
-        tvTools.choose("解码方式 · 当前 ${decoderLabel()}",listOf("硬解 · 电视解码器直接解 HEVC，省电流畅；部分电视画面上方出现绿色条带","软解 · 平台软件解码器，画面干净；吃 CPU，老电视可能掉帧"),anchor,{ choice ->
-            library.hevcDisabled=choice==1
-            if(anchor.tag!="playback-settings") anchor.text="解码方式  ·  ${decoderLabel()}"
-            if(inPlayer && library.hevcDisabled!=previous) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
+        val safe=library.softwareDecodeSafe
+        val softLabel=if(safe) "软解 · 平台软件解码器，画面干净；吃 CPU，老电视可能掉帧"
+            else "软解 · 本机不提供：安卓 7 / 低内存设备软解 HEVC 会闪退"
+        tvTools.choose("解码方式 · 当前 ${decoderLabel()}",listOf("硬解 · 电视解码器直接解 HEVC，省电流畅；部分电视画面上方出现绿色条带",softLabel),anchor,{ choice ->
+            if(choice==1 && !safe) Toast.makeText(this,"本机（安卓 ${android.os.Build.VERSION.RELEASE}）软解 HEVC 会闪退，继续使用硬解",Toast.LENGTH_LONG).show()
+            else {
+                library.hevcDisabled=choice==1
+                if(anchor.tag!="playback-settings") anchor.text="解码方式  ·  ${decoderLabel()}"
+                if(inPlayer && library.hevcDisabled!=previous) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
+            }
         })
     }
     private fun frameResizeMode()=when(library.frameMode) {

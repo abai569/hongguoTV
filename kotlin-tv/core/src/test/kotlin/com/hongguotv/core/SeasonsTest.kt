@@ -54,6 +54,13 @@ class SeasonsTest {
         assertTrue(Seasons.matchesQuery("WHCLQSJ","完全无关的标题"))
     }
 
+    @Test fun `numerals are rendered for probe keywords`() {
+        assertEquals("一",Seasons.numeral(1))
+        assertEquals("十二",Seasons.numeral(12))
+        assertEquals("二十",Seasons.numeral(20))
+        assertEquals("21",Seasons.numeral(21))
+    }
+
     @Test fun `unrelated titles are dropped`() {
         val rows=listOf(series("1","我合成了全世界","全 60 集"),series("5","毫不相关的剧"))
         assertEquals(listOf("1"),Seasons.pick("我合成了全世界","2","我合成了全世界第2季",rows).map { it.id })
