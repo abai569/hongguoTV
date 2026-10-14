@@ -18,10 +18,15 @@ import java.util.concurrent.TimeUnit
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
                      val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
-    /** Try each proxy in order (for networks where GitHub is slow), then direct GitHub. */
-    val downloadUrls get() = run {
-        val path = "$RELEASES/download/$tag/${URLEncoder.encode(fileName, "UTF-8").replace("+", "%20")}"
-        DOWNLOAD_PROXIES.map { it + path } + path
+    /**
+     * 下载地址顺序：Gitee 镜像（国内快，需发版时同步过去）→ GitHub 代理 → GitHub 直连。
+     * mirror 形如 https://gitee.com/<owner>/<repo>，为空表示未配置镜像。
+     */
+    fun downloadUrls(mirror: String? = null): List<String> {
+        val file = URLEncoder.encode(fileName, "UTF-8").replace("+", "%20")
+        val path = "$RELEASES/download/$tag/$file"
+        val mirrored = mirror?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }?.let { "$it/releases/download/$tag/$file" }
+        return listOfNotNull(mirrored) + DOWNLOAD_PROXIES.map { it + path } + path
     }
     companion object {
         const val REPOSITORY = "abai569/hongguoTV"
@@ -79,22 +84,26 @@ object UpdateFiles {
     }
 }
 
-class AppUpdateRepository : java.io.Closeable {
+class AppUpdateRepository(private val mirrorBase: String? = null) : java.io.Closeable {
     private val http = OkHttpClient.Builder().connectTimeout(6, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(5, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
-            // Follow GitHub's CDN redirects, never cleartext or arbitrary manifest-provided hosts.
-            if (url.scheme != "https" || url.host !in setOf("ghfast.top", "git-proxy.abai.eu.org", "gh-proxy.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"))
+            // Follow GitHub/Gitee CDN redirects, never cleartext or arbitrary manifest-provided hosts.
+            if (url.scheme != "https" || url.host !in setOf("ghfast.top", "git-proxy.abai.eu.org", "gh-proxy.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "gitee.com", "giteeusercontent.com"))
                 throw IOException("更新下载地址不受支持")
             chain.proceed(chain.request())
         }.build()
     private fun request(url: String) = Request.Builder().url(url).header("User-Agent", "HongguoTV-Updater")
         .header("Cache-Control", "no-cache").build()
     fun latest(updateFile: String, expectedPackage: String): AppUpdate {
-        for (base in AppUpdate.DOWNLOAD_PROXIES.map { it + AppUpdate.RELEASES } + AppUpdate.RELEASES) {
-            try { return fetch("$base/latest/download/$updateFile", expectedPackage) } catch (_: Exception) {}
-        }
-        throw IOException("无法连接更新服务器，请检查网络后重试")
+        // 镜像优先（国内快、且 GitHub 不通时仍能更新），同时问一次 GitHub 链，取版本号更高的那个。
+        val mirror = mirrorBase?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+            ?.let { base -> runCatching { fetch("$base/raw/master/$updateFile", expectedPackage) }.getOrNull() }
+        val direct = (AppUpdate.DOWNLOAD_PROXIES.map { it + AppUpdate.RELEASES } + AppUpdate.RELEASES).asSequence()
+            .mapNotNull { base -> runCatching { fetch("$base/latest/download/$updateFile", expectedPackage) }.getOrNull() }
+            .firstOrNull()
+        return listOfNotNull(mirror, direct).maxByOrNull { it.versionCode }
+            ?: throw IOException("无法连接更新服务器，请检查网络后重试")
     }
     private fun fetch(url: String, expectedPackage: String): AppUpdate {
         val call = http.newCall(request(url))
@@ -111,7 +120,7 @@ class AppUpdateRepository : java.io.Closeable {
     }
     fun download(update: AppUpdate, file: File, progress: (Int) -> Unit) {
         if (UpdateFiles.verify(file, update)) return
-        for (url in update.downloadUrls) {
+        for (url in update.downloadUrls(mirrorBase)) {
             try {
                 http.newCall(request(url)).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("安装包下载失败，请稍后重试")

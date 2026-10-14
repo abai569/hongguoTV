@@ -30,7 +30,15 @@ class AppUpdatesTest {
             "https://git-proxy.abai.eu.org/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
             "https://gh-proxy.com/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
             "https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk"
-        ), update().downloadUrls)
+        ), update().downloadUrls())
+        // Gitee 镜像优先（配置了镜像时），后面仍是固定仓库 + 三个代理。
+        assertEquals(listOf(
+            "https://gitee.com/example/mirror/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://ghfast.top/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://git-proxy.abai.eu.org/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://gh-proxy.com/https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk",
+            "https://github.com/abai569/hongguoTV/releases/download/kotlin-v0.9.0-build.1/%E7%9F%AD%E5%89%A7TV-0.9.0-build.1.apk"
+        ), update().downloadUrls("https://gitee.com/example/mirror/"))
         for (value in listOf("../../bad.apk", "evil.apk", "https://example.com/evil.apk", "短剧TV-1/2.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", value)
             assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp") }

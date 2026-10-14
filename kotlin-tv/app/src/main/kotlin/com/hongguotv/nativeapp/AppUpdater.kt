@@ -29,7 +29,7 @@ import java.util.concurrent.Future
 class AppUpdater(private val activity: Activity, private val idle: () -> Boolean) {
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val repository = AppUpdateRepository()
+    private val repository = AppUpdateRepository(BuildConfig.GITEE_MIRROR.trim().trimEnd('/').ifEmpty { null })
     private val preferences = activity.getSharedPreferences("app_updates", Activity.MODE_PRIVATE)
     private val apk = File(activity.cacheDir, "updates/update.apk")
     private var task: Future<*>? = null

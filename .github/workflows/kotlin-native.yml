@@ -35,6 +35,7 @@ jobs:
           HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
           HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
           HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/kotlin-v* ]]; then
@@ -42,10 +43,16 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=216
+          export HONGGUOTV_VERSION_CODE=217
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
+          # 配置了 Gitee 镜像仓库（仓库变量 GITEE_REPO=owner/repo）时，把镜像地址编进 APK，更新时优先走 Gitee。
+          if [[ -n "${GITEE_REPO:-}" ]]; then
+            export HONGGUOTV_GITEE_MIRROR="https://gitee.com/$GITEE_REPO"
+            echo "HONGGUOTV_GITEE_MIRROR=$HONGGUOTV_GITEE_MIRROR" >> "$GITHUB_ENV"
+            echo "Gitee 镜像：$HONGGUOTV_GITEE_MIRROR"
+          fi
           ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintTvDebug :app:lintPhoneDebug :app:assembleDebug :app:assembleRelease --console=plain
       - name: Prepare tagged APK
         if: startsWith(github.ref, 'refs/tags/kotlin-v')
@@ -113,6 +120,46 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "橘影 ${version}" \
             "${notes_args[@]}"
+      # 可选：同步到 Gitee 镜像（仓库变量 GITEE_REPO=owner/repo，密钥 GITEE_TOKEN）。任何失败都不影响 GitHub 发版。
+      - name: Mirror release to Gitee (optional)
+        if: startsWith(github.ref, 'refs/tags/kotlin-v') && vars.GITEE_REPO != ''
+        continue-on-error: true
+        env:
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [[ -z "${GITEE_TOKEN:-}" ]]; then echo "未配置 GITEE_TOKEN，跳过 Gitee 镜像"; exit 0; fi
+          api="https://gitee.com/api/v5/repos/$GITEE_REPO"
+          version="${GITHUB_REF_NAME#kotlin-v}"
+          notes="$(cat release-notes.md 2>/dev/null || echo "橘影TV $version")"
+          curl -sS -X POST "$api/releases" \
+            -d "access_token=$GITEE_TOKEN" -d "tag_name=$GITHUB_REF_NAME" \
+            -d "target_commitish=main" -d "name=橘影 $version" \
+            --data-urlencode "body=$notes" -o /tmp/gitee_release.json || true
+          id="$(python3 -c 'import json;print(json.load(open("/tmp/gitee_release.json")).get("id",""))' 2>/dev/null || true)"
+          if [[ -z "$id" ]]; then
+            id="$(curl -sS "$api/releases/tags/$GITHUB_REF_NAME?access_token=$GITEE_TOKEN" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)"
+          fi
+          if [[ -z "$id" ]]; then echo "Gitee release 创建/查询失败，跳过"; exit 0; fi
+          for f in "$TV_APK" "$PHONE_APK" SHA256SUMS; do
+            [[ -f "$f" ]] || continue
+            curl -sS -X POST "$api/releases/$id/attach_files" -F "access_token=$GITEE_TOKEN" -F "file=@$f" -o /dev/null \
+              || echo "上传 $f 到 Gitee 失败（忽略）"
+          done
+          for f in update.json update-phone.json; do
+            [[ -f "$f" ]] || continue
+            sha="$(curl -sS "$api/contents/$f?access_token=$GITEE_TOKEN" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("sha","") if isinstance(d,dict) else "")' 2>/dev/null || true)"
+            content="$(base64 -w0 "$f")"
+            if [[ -n "$sha" ]]; then
+              curl -sS -X POST "$api/contents/$f" -d "access_token=$GITEE_TOKEN" -d "message=发布 $version" -d "content=$content" -d "sha=$sha" -o /dev/null \
+                || echo "更新 $f 到 Gitee 失败（忽略）"
+            else
+              curl -sS -X POST "$api/contents/$f" -d "access_token=$GITEE_TOKEN" -d "message=发布 $version" -d "content=$content" -o /dev/null \
+                || echo "提交 $f 到 Gitee 失败（忽略）"
+            fi
+          done
+          echo "Gitee 镜像完成：$GITEE_REPO $GITHUB_REF_NAME"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
