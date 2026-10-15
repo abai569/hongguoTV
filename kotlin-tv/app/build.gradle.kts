@@ -11,8 +11,8 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 33
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 220
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.2.0"
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 221
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.2.1"
         // Gitee 镜像仓库（形如 https://gitee.com/<owner>/<repo>），CI 用 HONGGUOTV_GITEE_MIRROR 注入；为空则不启用镜像。
         buildConfigField("String", "GITEE_MIRROR", "\"${System.getenv("HONGGUOTV_GITEE_MIRROR").orEmpty()}\"")
     }

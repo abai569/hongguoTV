@@ -571,7 +571,7 @@ class MainActivity: Activity() {
         container.addView(top)
         container.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(6) })
         if(tab==5) {
-            val scroll=ScrollView(this); val body=column(); scroll.addView(body); container.addView(scroll,lp(-1,0).apply { weight=1f })
+            val body=column(); container.addView(body,lp(-1,0).apply { weight=1f })
             settings(body); if(focusNav) nav[tab].requestFocus(); return
         }
         if(tab==0) {
@@ -1020,9 +1020,9 @@ class MainActivity: Activity() {
     private fun settings(parent: LinearLayout) {
         parent.addView(text("按你的习惯播放",25f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL); setPadding(0,dp(15),0,dp(7)) })
         parent.addView(text("偏好自动保存，下一部剧继续使用。",13f,muted).apply { setPadding(0,0,0,dp(18)) })
-        // 一个满宽卡片，内部两列布局
+        // 一个满宽卡片，内部两列布局，用 weight 让它占据剩余空间
         val card=column().apply { setPadding(dp(16),dp(16),dp(16),dp(16)); background=rounded(surface) }
-        parent.addView(card,lp(-1,-2))
+        parent.addView(card,lp(-1,0).apply { weight=1f })
         val twoCol=row().apply { gravity=Gravity.TOP }
         card.addView(twoCol,lp(-1,-2))
         val leftCol=column().apply { setPadding(0,0,dp(8),0) }
