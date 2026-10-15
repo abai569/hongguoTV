@@ -1021,21 +1021,15 @@ class MainActivity: Activity() {
     private fun settings(parent: LinearLayout) {
         parent.addView(text("按你的习惯播放",25f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL); setPadding(0,dp(15),0,dp(7)) })
         parent.addView(text("偏好自动保存，下一部剧继续使用。",13f,muted).apply { setPadding(0,0,0,dp(18)) })
-        // 播放偏好与片单与设备合成单独一列（每项只占屏幕一半宽，和原来的按钮一样）；手机占满整行。
-        val phoneLayout=BuildConfig.CHANNEL=="phone"
-        val box=column().apply { setPadding(dp(16),dp(16),dp(16),dp(16)); background=rounded(surface) }
-        if(phoneLayout) parent.addView(box,lp(-1,-2))
-        else {
-            val wrap=row().apply { gravity=Gravity.TOP }
-            wrap.addView(box,lp(0,-2).apply { weight=1f })
-            wrap.addView(View(this),lp(0,1).apply { weight=1f })
-            parent.addView(wrap)
-        }
-        val playback=box; val device=box
-        fun heading(group: LinearLayout,title: String,subtitle: String) {
-            group.addView(text(title,18f).apply { setTypeface(null,Typeface.BOLD); if(group.childCount>0) setPadding(0,dp(14),0,0) })
-            group.addView(text(subtitle,12f,muted).apply { setPadding(0,dp(5),0,dp(15)) })
-        }
+        // 一个满宽卡片，内部两列布局
+        val card=column().apply { setPadding(dp(16),dp(16),dp(16),dp(16)); background=rounded(surface) }
+        parent.addView(card,lp(-1,-2))
+        val twoCol=row().apply { gravity=Gravity.TOP }
+        card.addView(twoCol,lp(-1,-2))
+        val leftCol=column().apply { setPadding(0,0,dp(8),0) }
+        val rightCol=column().apply { setPadding(dp(8),0,0,0) }
+        twoCol.addView(leftCol,lp(0,-2).apply { weight=1f })
+        twoCol.addView(rightCol,lp(0,-2).apply { weight=1f })
         fun setting(group: LinearLayout,label: String,action: ()->Unit): TextView {
             val view=button(label,onClick=action).apply {
                 gravity=Gravity.CENTER_VERTICAL; setPadding(dp(13),dp(11),dp(13),dp(11))
@@ -1045,42 +1039,42 @@ class MainActivity: Activity() {
             group.addView(view,lp(-1,-2).apply { bottomMargin=dp(8) })
             return view
         }
-        heading(playback,"播放偏好","所有剧集共用，播放中也可调整")
-        heading(device,"片单与设备","保管记录，保持应用更新")
+        // 左列：播放偏好
         lateinit var qualityButton: TextView
         val qualityHint=if(library.softwareDecodeSafe) "${library.maxQuality}P" else "${library.maxQuality}P（本机最高 720P）"
-        qualityButton=setting(playback,"默认清晰度  ·  $qualityHint") { showQualityPicker(qualityButton,false) }
+        qualityButton=setting(leftCol,"默认清晰度  ·  $qualityHint") { showQualityPicker(qualityButton,false) }
         lateinit var defaultSpeed: TextView
-        defaultSpeed=setting(playback,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
+        defaultSpeed=setting(leftCol,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         lateinit var frame: TextView
-        frame=setting(playback,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
+        frame=setting(leftCol,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
         lateinit var autoNextButton: TextView
-        autoNextButton=setting(playback,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
+        autoNextButton=setting(leftCol,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
             library.autoNext=!library.autoNext
             autoNextButton.text="自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}"
         }
         lateinit var danmakuButton: TextView
-        danmakuButton=setting(playback,"弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}") {
+        danmakuButton=setting(leftCol,"弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}") {
             library.danmakuEnabled=!library.danmakuEnabled
             danmakuButton.text="弹幕  ·  ${if(library.danmakuEnabled) "开启" else "关闭"}"
         }
         lateinit var decoderButton: TextView
-        decoderButton=setting(playback,"解码方式  ·  ${decoderLabel()}") { showDecoderPicker(decoderButton,false) }
+        decoderButton=setting(leftCol,"解码方式  ·  ${decoderLabel()}") { showDecoderPicker(decoderButton,false) }
+        // 右列：片单与设备
         lateinit var backupBtn: TextView
-        backupBtn=setting(device,"备份与恢复") {
+        backupBtn=setting(rightCol,"备份与恢复") {
             tvTools.choose("备份与恢复",listOf("导出备份到本地","从本地文件恢复"),backupBtn,{ choice ->
                 if(choice==0) exportBackup() else importBackup()
             })
         }
         lateinit var hidden: TextView
-        hidden=setting(device,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
+        hidden=setting(rightCol,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
         }
         lateinit var updates: TextView
-        updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
+        updates=setting(rightCol,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         val crashFile=java.io.File(filesDir,"crash-last.txt")
         lateinit var debugBtn: TextView
-        debugBtn=setting(device,"调试"+(if(crashFile.exists()) "  ·  有崩溃记录" else "")) {
+        debugBtn=setting(rightCol,"调试"+(if(crashFile.exists()) "  ·  有崩溃记录" else "")) {
             tvTools.choose("调试信息 · 可拍照",listOf("播放信息","弹幕信息","崩溃日志"),debugBtn,{ choice ->
                 when(choice) {
                     0 -> {
@@ -1096,14 +1090,23 @@ class MainActivity: Activity() {
                 }
             })
         }
-        val license=setting(device,"开源许可") {
+        val license=setting(rightCol,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
-        val items=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,decoderButton,backupBtn,hidden,updates,debugBtn,license)
-        items.forEachIndexed { index,view ->
-            view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
-            view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
-            view.nextFocusLeftId=view.id; view.nextFocusRightId=view.id
+        // 焦点导航：左列内部上下，右列内部上下，左右列之间左右
+        val leftItems=listOf(qualityButton,defaultSpeed,frame,autoNextButton,danmakuButton,decoderButton)
+        val rightItems=listOf(backupBtn,hidden,updates,debugBtn,license)
+        leftItems.forEachIndexed { index,view ->
+            view.nextFocusUpId=leftItems.getOrNull(index-1)?.id ?: nav[tab].id
+            view.nextFocusDownId=leftItems.getOrNull(index+1)?.id ?: view.id
+            view.nextFocusLeftId=view.id
+            view.nextFocusRightId=rightItems.getOrNull(index)?.id ?: rightItems.last().id
+        }
+        rightItems.forEachIndexed { index,view ->
+            view.nextFocusUpId=rightItems.getOrNull(index-1)?.id ?: nav[tab].id
+            view.nextFocusDownId=rightItems.getOrNull(index+1)?.id ?: view.id
+            view.nextFocusLeftId=leftItems.getOrNull(index)?.id ?: leftItems.last().id
+            view.nextFocusRightId=view.id
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
         parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
