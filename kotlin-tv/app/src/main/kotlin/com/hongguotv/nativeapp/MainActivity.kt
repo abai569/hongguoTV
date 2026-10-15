@@ -802,11 +802,11 @@ class MainActivity: Activity() {
                         background=rounded(if(rank!=null && rank<=3) Color.rgb(233,60,60) else Color.WHITE)
                     }
                     artwork.addView(rankBadge,FrameLayout.LayoutParams(dp(24),dp(24)).apply { gravity=Gravity.TOP or Gravity.START; setMargins(dp(3),dp(3),dp(3),dp(3)) })
-                    card.contentDescription=(if(rank!=null) "第 $rank 名，" else "")+item.title+"，"+(position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无")
+                    card.contentDescription=(if(rank!=null) "第 $rank 名，" else "")+item.title+(if(collectionRank!=null) "，"+item.badge else "，"+(position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"))
                 }
                 card.addView(text(item.title,14f).apply { maxLines=2; minLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) },lp(-1,-2).apply { weight=1f })
                 val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
-                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(showRank) position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,if(showRank || tab==3) accent else muted).apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
+                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(showRank && collectionRank==null) position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,if(showRank && collectionRank==null || tab==3) accent else muted).apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
                 card.addView(badge,lp(-1,-2)); if(tab==3) favoriteBadges[item.id]=badge
                 card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
@@ -956,13 +956,12 @@ class MainActivity: Activity() {
         val updates=library.favorites().filter { (library.favoriteUpdate(it.id)?.added ?: 0)>0 }
         val later=library.later()
         val local=listOf(
-            HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,
-                "第 ${p.episodeIndex+1} 集 · ${if(p.completed) "接着看下一集" else formatTime(p.position)}",true,
+            HomeScreen.Shelf("resume","接着看",recent.take(8).map { p -> HomeScreen.Entry(p.series,p.series.badge,true,
                 if(p.duration>0) (p.position*100/p.duration).toInt().coerceIn(0,100) else null) },
                 if(recent.size>8) { { showCollection("resume") } } else null,columns(),homeCardWidth()),
-            HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,library.favoriteLabel(it.id),true) },
+            HomeScreen.Shelf("updates","收藏有更新",updates.take(8).map { HomeScreen.Entry(it,it.badge,true) },
                 if(updates.size>8) { { showCollection("updates") } } else null,columns(),homeCardWidth()),
-            HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,"稍后看 · 长按管理") },
+            HomeScreen.Shelf("later","稍后看",later.take(10).map { HomeScreen.Entry(it,it.badge) },
                 if(later.size>10) { { showCollection("later") } } else null,columns(),homeCardWidth()))
         return local.filter { it.entries.isNotEmpty() } + rankShelves(false)
     }

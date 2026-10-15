@@ -43,7 +43,12 @@ jobs:
           else
             version="0.8.1"
           fi
-          export HONGGUOTV_VERSION_CODE=217
+          # 动态计算 versionCode：去掉点号，如果不够则补0（如 2.1.8 -> 218，2.1.10 -> 2110）
+          versionCode=$(echo "$version" | tr -d '.')
+          if [[ ${#versionCode} -lt 3 ]]; then
+            versionCode="${versionCode}0"
+          fi
+          export HONGGUOTV_VERSION_CODE="$versionCode"
           export HONGGUOTV_VERSION_NAME="$version"
           echo "HONGGUOTV_VERSION_CODE=$HONGGUOTV_VERSION_CODE" >> "$GITHUB_ENV"
           echo "HONGGUOTV_VERSION_NAME=$HONGGUOTV_VERSION_NAME" >> "$GITHUB_ENV"
@@ -136,10 +141,14 @@ jobs:
           curl -sS -X POST "$api/releases" \
             -d "access_token=$GITEE_TOKEN" -d "tag_name=$GITHUB_REF_NAME" \
             -d "target_commitish=main" -d "name=橘影 $version" \
-            --data-urlencode "body=$notes" -o /tmp/gitee_release.json || true
+            --data-urlencode "body=$notes" -o /tmp/gitee_release.json -w "\nHTTP_CODE:%{http_code}\n" || true
+          echo "Gitee create release response:"; cat /tmp/gitee_release.json 2>/dev/null || echo "(empty)"
           id="$(python3 -c 'import json;print(json.load(open("/tmp/gitee_release.json")).get("id",""))' 2>/dev/null || true)"
           if [[ -z "$id" ]]; then
-            id="$(curl -sS "$api/releases/tags/$GITHUB_REF_NAME?access_token=$GITEE_TOKEN" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)"
+            echo "创建失败，尝试查询已有 release..."
+            curl -sS "$api/releases/tags/$GITHUB_REF_NAME?access_token=$GITEE_TOKEN" -o /tmp/gitee_query.json -w "\nHTTP_CODE:%{http_code}\n" || true
+            echo "Gitee query release response:"; cat /tmp/gitee_query.json 2>/dev/null || echo "(empty)"
+            id="$(python3 -c 'import json,sys;print(json.load(open("/tmp/gitee_query.json")).get("id",""))' 2>/dev/null || true)"
           fi
           if [[ -z "$id" ]]; then echo "Gitee release 创建/查询失败，跳过"; exit 0; fi
           for f in "$TV_APK" "$PHONE_APK" SHA256SUMS; do
