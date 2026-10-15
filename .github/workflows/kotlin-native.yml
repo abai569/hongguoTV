@@ -137,10 +137,18 @@ jobs:
           if [[ -z "${GITEE_TOKEN:-}" ]]; then echo "未配置 GITEE_TOKEN，跳过 Gitee 镜像"; exit 0; fi
           api="https://gitee.com/api/v5/repos/$GITEE_REPO"
           version="${GITHUB_REF_NAME#kotlin-v}"
+
+          # 先同步代码到 Gitee（force push）
+          echo "同步代码到 Gitee..."
+          git remote add gitee "https://abai569:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git" || true
+          git push gitee main:master --force || { echo "代码同步失败，跳过"; exit 0; }
+          echo "代码同步完成"
+
+          # 创建 release
           notes="$(cat release-notes.md 2>/dev/null || echo "橘影TV $version")"
           curl -sS -X POST "$api/releases" \
             -d "access_token=$GITEE_TOKEN" -d "tag_name=$GITHUB_REF_NAME" \
-            -d "target_commitish=main" -d "name=橘影 $version" \
+            -d "target_commitish=master" -d "name=橘影 $version" \
             --data-urlencode "body=$notes" -o /tmp/gitee_release.json -w "\nHTTP_CODE:%{http_code}\n" || true
           echo "Gitee create release response:"; cat /tmp/gitee_release.json 2>/dev/null || echo "(empty)"
           id="$(python3 -c 'import json;print(json.load(open("/tmp/gitee_release.json")).get("id",""))' 2>/dev/null || true)"
@@ -161,7 +169,7 @@ jobs:
             sha="$(curl -sS "$api/contents/$f?access_token=$GITEE_TOKEN" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("sha","") if isinstance(d,dict) else "")' 2>/dev/null || true)"
             content="$(base64 -w0 "$f")"
             if [[ -n "$sha" ]]; then
-              curl -sS -X POST "$api/contents/$f" -d "access_token=$GITEE_TOKEN" -d "message=发布 $version" -d "content=$content" -d "sha=$sha" -o /dev/null \
+              curl -sS -X PUT "$api/contents/$f" -d "access_token=$GITEE_TOKEN" -d "message=发布 $version" -d "content=$content" -d "sha=$sha" -o /dev/null \
                 || echo "更新 $f 到 Gitee 失败（忽略）"
             else
               curl -sS -X POST "$api/contents/$f" -d "access_token=$GITEE_TOKEN" -d "message=发布 $version" -d "content=$content" -o /dev/null \

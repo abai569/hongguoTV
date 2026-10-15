@@ -1108,7 +1108,7 @@ class MainActivity: Activity() {
             view.nextFocusRightId=view.id
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  QQ交流群：1109483648    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  BUG反馈/定制软件联系微信：abai531    ·    收藏与进度保存在本机 ",12f,muted).apply { setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun backupDir(): java.io.File {
