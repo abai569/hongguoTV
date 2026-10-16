@@ -364,4 +364,35 @@ class ContentRepositoryTest {
         assertEquals(listOf("222"),items.map { it.id })
         assertEquals("全53集",items.single().badge)
     }
+
+    @Test fun searchAllProbesSeasonsTheSuggestIndexOnlyReturnsCurrentOne() {
+        var probes=0
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) {
+                if(request.url.queryParameter("count")=="8") {
+                    probes++
+                    """{"suggest_list":[{"word_type":"short_play_name","name":"合成测试剧第二季","keyword":"222","video_data":{"episode_right_text":"全10集"}},{"word_type":"short_play_name","name":"合成测试剧第三季","keyword":"333","video_data":{"episode_right_text":"全20集"}}]}"""
+                } else """{"suggest_list":[{"word_type":"short_play_name","name":"合成测试剧","keyword":"111","video_data":{"episode_right_text":"全8集"}}]}"""
+            } else """{"code":0,"search_tabs":[{"tab_type":11,"data":[],"has_more":false},{"tab_type":19,"data":[],"has_more":false}]}"""
+        }
+        val items=repo.searchAll("合成测试剧",1).items
+        assertEquals(listOf("111","222","333"),items.map { it.id })
+        assertTrue("搜索首页应按缺失季号补搜",probes>0)
+    }
+
+    @Test fun searchAllSkipsSeasonProbesWhenResultsAreAlreadyRich() {
+        var probes=0
+        val rows=JSONArray()
+        (1..8).forEach { index ->
+            rows.put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","$index").put("title","合成测试剧第${index}季").put("episode_cnt",10))))
+        }
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) {
+                if(request.url.queryParameter("count")=="8") probes++
+                """{"suggest_list":[]}"""
+            } else JSONObject().put("code",0).put("search_tabs",JSONArray().put(JSONObject().put("tab_type",11).put("has_more",false).put("data",rows))).toString()
+        }
+        assertEquals(8,repo.searchAll("合成测试剧",1).items.size)
+        assertEquals(0,probes)
+    }
 }

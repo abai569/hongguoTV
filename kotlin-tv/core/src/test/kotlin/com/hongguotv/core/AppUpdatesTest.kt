@@ -51,6 +51,12 @@ class AppUpdatesTest {
             assertEquals(name, AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp").fileName)
         }
     }
+    @Test fun currentArtifactNamesParse() {
+        for (name in listOf("juguo-2.2.2-v8a.apk", "juguotv-2.2.2-v7a.apk", "橘果-2.2.2-v8a.apk", "橘果tv-2.2.2-v7a.apk")) {
+            val o = json(); o.getJSONObject("apk").put("name", name)
+            assertEquals(name, AppUpdate.parse(o.toString(), "com.hongguotv.nativeapp").fileName)
+        }
+    }
     @Test fun rejectOtherPackageAndInvalidSchema() {
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("packageName", "other.app").toString(), "com.hongguotv.nativeapp") }
         assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("schema", 2).toString(), "com.hongguotv.nativeapp") }

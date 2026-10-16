@@ -11,8 +11,8 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 33
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 221
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.2.1"
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 222
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "2.2.2"
         // Gitee 镜像仓库（形如 https://gitee.com/<owner>/<repo>），CI 用 HONGGUOTV_GITEE_MIRROR 注入；为空则不启用镜像。
         buildConfigField("String", "GITEE_MIRROR", "\"${System.getenv("HONGGUOTV_GITEE_MIRROR").orEmpty()}\"")
     }
@@ -20,14 +20,14 @@ android {
     productFlavors {
         create("tv") {
             applicationId = "com.hongguotv.nativeapp"
-            manifestPlaceholders["appLabel"] = "橘影TV"
+            manifestPlaceholders["appLabel"] = "橘果TV"
             manifestPlaceholders["orientation"] = "landscape"
             buildConfigField("String", "CHANNEL", "\"tv\"")
             buildConfigField("String", "UPDATE_FILE", "\"update.json\"")
         }
         create("phone") {
             applicationId = "com.hongguotv.phone"
-            manifestPlaceholders["appLabel"] = "橘影"
+            manifestPlaceholders["appLabel"] = "橘果"
             manifestPlaceholders["orientation"] = "portrait"
             buildConfigField("String", "CHANNEL", "\"phone\"")
             buildConfigField("String", "UPDATE_FILE", "\"update-phone.json\"")

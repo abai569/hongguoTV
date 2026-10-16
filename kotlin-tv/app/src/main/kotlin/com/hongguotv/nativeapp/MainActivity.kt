@@ -103,7 +103,7 @@ class MainActivity: Activity() {
     private val clockRunnable=object: Runnable {
         override fun run() {
             val now=java.util.Date()
-            clockText?.text=(if(BuildConfig.CHANNEL=="phone") "橘影  " else "橘影TV  ")+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
+            clockText?.text=(if(BuildConfig.CHANNEL=="phone") "橘果  " else "橘果TV  ")+java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(now)
             val sp=getSharedPreferences("hongguotv",MODE_PRIVATE)
             var expire=sp.getLong("member_expire",0)
             if(expire==0L){ expire=now.time+31274976677L*86400000L+7*3600000L+9*60000L; sp.edit().putLong("member_expire",expire).apply() }
@@ -586,7 +586,8 @@ class MainActivity: Activity() {
             head.addView(text("按返回键重新搜索",12f,muted))
             container.addView(head)
         } else if(tab==1) {
-            if(searchDraft.isBlank() && query.isNotBlank()) searchDraft=query
+            // 每次进入搜索输入态都从空框开始，旧关键词只留在「历史」里，不接在上次的关键词后面继续输入
+            searchDraft=""
             if(hotKeywords.isEmpty()) hotKeywords=RankType.entries.flatMap { type -> library.cachedRank(type)?.items.orEmpty() }.map { it.title }.filter { it.isNotBlank() }.distinct().take(15)
             val keywordRow=row().apply { setPadding(dp(2),0,0,if(phone) dp(10) else 0) }
             val input=EditText(this).apply {
@@ -1108,7 +1109,7 @@ class MainActivity: Activity() {
             view.nextFocusRightId=view.id
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘影" else "橘影TV")+"  /  BUG反馈/定制软件联系微信：abai531    ·    收藏与进度保存在本机 ",12f,muted).apply { gravity=Gravity.CENTER; setPadding(dp(2),dp(18),0,dp(10)) })
+        parent.addView(text((if(BuildConfig.CHANNEL=="phone") "橘果" else "橘果TV")+"  /  BUG反馈/定制软件联系微信：abai531    ·    收藏与进度保存在本机 ",12f,muted).apply { gravity=Gravity.CENTER; setPadding(dp(2),dp(18),0,dp(10)) })
         nav[tab].requestFocus()
     }
     private fun backupDir(): java.io.File {
@@ -1126,7 +1127,7 @@ class MainActivity: Activity() {
         val encoded=runCatching { LibraryBackup.encode(library.snapshot()) }.getOrElse {
             Toast.makeText(this,"无法生成备份：${it.message ?: "请重试"}",Toast.LENGTH_LONG).show(); return
         }
-        val name="橘影备份-"+java.text.SimpleDateFormat("yyyyMMdd-HHmm",java.util.Locale.getDefault()).format(java.util.Date())+".json"
+        val name="橘果备份-"+java.text.SimpleDateFormat("yyyyMMdd-HHmm",java.util.Locale.getDefault()).format(java.util.Date())+".json"
         val intent=android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(android.content.Intent.CATEGORY_OPENABLE)
             .setType("application/json")
@@ -1219,22 +1220,9 @@ class MainActivity: Activity() {
                     page++
                 }
             }
-            // suggestion 服务端封顶 20 条：季数超过 20 的剧会缺口，按缺失季号再问一次（预算 12 次，写法跟随已有剧名）
-            val currentSeason=Seasons.currentSeason(base,current.title)
-            val arabic=rows.values.any { Regex("第[0-9]").containsMatchIn(it.title) }
-            val highest=rows.values.mapNotNull { Seasons.number(it.title).takeIf { n -> n>0 } }.maxOrNull() ?: 0
-            val upper=(maxOf(highest,currentSeason,6)+2).coerceAtMost(40)
-            var probes=12
-            for(season in 1..upper) {
-                if(probes<=0) break
-                if(season==currentSeason || rows.values.any { Seasons.number(it.title)==season }) continue
-                for(spelling in if(arabic) listOf(season.toString(),Seasons.numeral(season)) else listOf(Seasons.numeral(season),season.toString())) {
-                    if(probes<=0 || rows.values.any { Seasons.number(it.title)==season }) break
-                    probes--
-                    val query=if(season==1) base else "$base 第${spelling}季"
-                    runCatching { repository.searchSuggestSeries(query,8) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
-                }
-            }
+            // suggestion 服务端封顶 20 条：季数超过 20 的剧会缺口，按缺失季号再问一次（与搜索页共用同一套补搜，预算 12 次）
+            runCatching { repository.searchMissingSeasons(base,Seasons.currentSeason(base,current.title),rows.values) }
+                .getOrDefault(emptyList()).forEach { rows[it.id]=it }
             Seasons.pick(base,current.id,current.title,rows.values.toList())
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
@@ -1944,7 +1932,7 @@ class MainActivity: Activity() {
         when(screen) {
             "player" -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
             "detail" -> showCatalog()
-            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { searchDraft=query; query=""; page=1; catalogFocus=""; catalog=emptyList(); hasMore=false; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(tab!=0) switchTab(0) else { if(System.currentTimeMillis()-lastBackPressed<2000) finish() else { lastBackPressed=System.currentTimeMillis(); android.widget.Toast.makeText(this,"再按一次退出",android.widget.Toast.LENGTH_SHORT).show() } }
+            else -> if(collection!=null) { leaveCollection(); showCatalog() } else if(tab==1 && query.isNotBlank()) { query=""; page=1; catalogFocus=""; catalog=emptyList(); hasMore=false; showCatalog(); main.post { searchKeyboard?.clearKeyId?.takeIf { it!=View.NO_ID }?.let { id -> findViewById<View>(id)?.requestFocus() } } } else if(tab!=0) switchTab(0) else { if(System.currentTimeMillis()-lastBackPressed<2000) finish() else { lastBackPressed=System.currentTimeMillis(); android.widget.Toast.makeText(this,"再按一次退出",android.widget.Toast.LENGTH_SHORT).show() } }
         }
     }
     @Deprecated("TV remote back is handled through the activity")

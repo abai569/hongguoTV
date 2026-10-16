@@ -18,7 +18,7 @@
 param(
     [string]$RepoName = 'hongguotv-updates',
     [string]$GitHubRepo = 'abai569/hongguoTV',
-    [string]$Description = '橘影TV 更新镜像（update.json + APK）'
+    [string]$Description = '橘果TV 更新镜像（update.json + APK）'
 )
 $ErrorActionPreference = 'Stop'
 if (-not $env:GITEE_TOKEN) { throw '请先设置 $env:GITEE_TOKEN = "<Gitee 私人令牌>"（只勾 projects 权限即可）' }

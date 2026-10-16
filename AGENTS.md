@@ -23,4 +23,4 @@
 - 因此正文必须用**纯文本也能读**的写法：`- ` 列表加普通文字即可；不要用 `**加粗**`、`###` 小标题、Markdown 链接（应用内弹窗按纯文本渲染，会把符号原样显示出来）。版本间的「完整变更」对比链接由 CI 追加到 Release 正文，不要写进 `CHANGELOG.md`。
 - 内容按用户视角写，分「新增 / 调整」「修复」两类，写清现象与改法（例如"关掉 HEVC 后播放失败 → 改为回落 HEVC 源并标注软解"），不能只抄提交信息。确实没有内容也要写一句说明（例如「仅同步依赖，无功能变化」）。
 - 不允许留空，也不允许只留 CI `--generate-notes` 自动生成的提交列表。
-- CI 找不到该版本的节时会回退成一行标签「橘影TV <版本>」且不报错；出现这种情况说明漏写了 `CHANGELOG.md`，必须补写该节，再用 `gh release edit <tag> --repo abai569/hongguoTV --notes-file <文件>` 补进 Release 正文；应用内 `notes` 需要同步重新上传 `update.json` / `update-phone.json`。
+- CI 找不到该版本的节时会回退成一行标签「橘果TV <版本>」且不报错；出现这种情况说明漏写了 `CHANGELOG.md`，必须补写该节，再用 `gh release edit <tag> --repo abai569/hongguoTV --notes-file <文件>` 补进 Release 正文；应用内 `notes` 需要同步重新上传 `update.json` / `update-phone.json`。

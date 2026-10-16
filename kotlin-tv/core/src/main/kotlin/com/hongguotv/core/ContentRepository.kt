@@ -159,7 +159,12 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val comic=runCatching { search(keyword,page,ContentType.COMIC) }.getOrElse { CatalogPage(emptyList(),false) }
         // App 与网页搜索都会漏季（例如「万妖图录传第二季」），第一页再并入搜索建议里的同系列剧集
         val aliases=if(page==1) runCatching { searchSuggestSeries(keyword,20) }.getOrDefault(emptyList()) else emptyList()
-        val items=(short.items+comic.items+aliases).distinctBy { it.id }
+        val merged=(short.items+comic.items+aliases).distinctBy { it.id }
+        // 建议接口拿整部剧的完整剧名去问只会回当前季，兄弟季要按季号逐季补搜；只在首页、查询像剧名且结果很少时补，避免拖慢普通搜索
+        val base=Seasons.base(keyword)
+        val titleLike=base.length>=4 && base.any { it.code>0x7f }
+        val extras=if(page==1 && titleLike && merged.size<=5) runCatching { searchMissingSeasons(base,Seasons.currentSeason(base,keyword),merged) }.getOrDefault(emptyList()) else emptyList()
+        val items=(merged+extras).distinctBy { it.id }
         if(items.isEmpty() && !short.hasMore && !comic.hasMore) throw IOException("Search unavailable")
         return CatalogPage(items,short.hasMore || comic.hasMore)
     }
@@ -197,6 +202,34 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                 (0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
         }
         return valid(rows).filter { Seasons.matchesQuery(query,it.title) }
+    }
+    /**
+     * 同名剧的其他季：建议接口拿「整部剧完整剧名」去问时只回当前季，兄弟季要靠「剧名 第X季」逐季问出来。
+     * known 是已经拿到的候选，skipSeason 是正在看/正在搜的那一季（不用再探测），budget 是补搜请求上限。
+     * 只返回 known 之外、且与剧名同族的条目。
+     */
+    fun searchMissingSeasons(baseTitle: String, skipSeason: Int, known: Collection<Series>, budget: Int = 12): List<Series> {
+        val base=Seasons.base(baseTitle).trim()
+        val normBase=Seasons.norm(base)
+        if(base.isEmpty() || normBase.isEmpty() || budget<=0) return emptyList()
+        val rows=LinkedHashMap<String,Series>()
+        known.forEach { rows[it.id]=it }
+        val arabic=rows.values.any { Regex("第[0-9]").containsMatchIn(it.title) }
+        val highest=rows.values.mapNotNull { Seasons.number(it.title).takeIf { n -> n>0 } }.maxOrNull() ?: 0
+        val upper=(maxOf(highest,skipSeason,6)+2).coerceAtMost(40)
+        var probes=budget
+        for(season in 1..upper) {
+            if(probes<=0) break
+            if(season==skipSeason || rows.values.any { Seasons.number(it.title)==season }) continue
+            for(spelling in if(arabic) listOf(season.toString(),Seasons.numeral(season)) else listOf(Seasons.numeral(season),season.toString())) {
+                if(probes<=0 || rows.values.any { Seasons.number(it.title)==season }) break
+                probes--
+                val query=if(season==1) base else "$base 第${spelling}季"
+                runCatching { searchSuggestSeries(query,8) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
+            }
+        }
+        val found=known.map { it.id }.toSet()
+        return rows.values.filter { it.id !in found && Seasons.norm(it.title).contains(normBase) }
     }
     private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))
     fun searchSuggestRaw(keyword: String): String {

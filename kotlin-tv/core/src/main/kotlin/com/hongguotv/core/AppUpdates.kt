@@ -42,7 +42,7 @@ data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk:
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 1..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex("kotlin-v[0-9][0-9A-Za-z.+-]{0,80}")))
-            require(update.fileName.matches(Regex("(橘影tv|橘影|juyingtv|juying|短剧TV|hongguotv-kotlin|hongguotv)-[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
+            require(update.fileName.matches(Regex("(橘果tv|橘果|juguotv|juguo|橘影tv|橘影|juyingtv|juying|短剧TV|hongguotv-kotlin|hongguotv)-[0-9][0-9A-Za-z.+-]{0,80}\\.apk")))
             require(update.size in 1..MAX_APK_BYTES && update.sha256.matches(Regex("[0-9a-f]{64}")))
             return update
         }

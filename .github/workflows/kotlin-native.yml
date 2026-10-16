@@ -67,8 +67,8 @@ jobs:
           set -euo pipefail
           version="${VERSION#kotlin-v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tv_apk="juyingtv-${version}-v7a.apk"
-          phone_apk="juying-${version}-v8a.apk"
+          tv_apk="juguotv-${version}-v7a.apk"
+          phone_apk="juguo-${version}-v8a.apk"
           echo "TV_APK=$tv_apk" >> "$GITHUB_ENV"
           echo "PHONE_APK=$phone_apk" >> "$GITHUB_ENV"
           mv kotlin-tv/app/build/outputs/apk/tv/release/app-tv-release.apk "$tv_apk"
@@ -89,7 +89,7 @@ jobs:
             started { print }
           ' CHANGELOG.md | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac)
           if [[ -z "$notes" ]]; then
-            notes="橘影TV ${version}"
+            notes="橘果TV ${version}"
           else
             printf '%s\n' "$notes" > release-notes.md
             echo "RELEASE_NOTES_FILE=release-notes.md" >> "$GITHUB_ENV"
@@ -123,7 +123,7 @@ jobs:
           fi
           gh release create "$TAG" "$TV_APK" "$PHONE_APK" update.json update-phone.json SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
-            --title "橘影 ${version}" \
+            --title "橘果 ${version}" \
             "${notes_args[@]}"
       # 可选：同步到 Gitee 镜像（仓库变量 GITEE_REPO=owner/repo，密钥 GITEE_TOKEN）。任何失败都不影响 GitHub 发版。
       - name: Mirror release to Gitee (optional)
@@ -145,10 +145,10 @@ jobs:
           echo "代码同步完成"
 
           # 创建 release
-          notes="$(cat release-notes.md 2>/dev/null || echo "橘影TV $version")"
+          notes="$(cat release-notes.md 2>/dev/null || echo "橘果TV $version")"
           curl -sS -X POST "$api/releases" \
             -d "access_token=$GITEE_TOKEN" -d "tag_name=$GITHUB_REF_NAME" \
-            -d "target_commitish=master" -d "name=橘影 $version" \
+            -d "target_commitish=master" -d "name=橘果 $version" \
             --data-urlencode "body=$notes" -o /tmp/gitee_release.json -w "\nHTTP_CODE:%{http_code}\n" || true
           echo "Gitee create release response:"; cat /tmp/gitee_release.json 2>/dev/null || echo "(empty)"
           id="$(python3 -c 'import json;print(json.load(open("/tmp/gitee_release.json")).get("id",""))' 2>/dev/null || true)"
