@@ -84,6 +84,6 @@ object Seasons {
     /** 标签：没写季号的第一季补上「第1季 ·」，其余原样。 */
     fun label(baseTitle: String,title: String,badge: String): String {
         val head=if(of(baseTitle,title)==0 && norm(title)==norm(baseTitle)) "第1季 · $title" else title
-        return "$head  ·  ${if(badge.isBlank()) "查看剧集" else badge}"
+        return "$head  ·  ${if(badge.isBlank()) "未更新" else badge}"
     }
 }

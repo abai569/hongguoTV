@@ -979,7 +979,7 @@ class MainActivity: Activity() {
         val positions=pageData.ranking?.positions
         val entries=pageData.items.filterNot { it.id in library.hidden() }.take(11).map { item ->
             val position=positions?.get(item.id)
-            val label=if(isCountBadge(item.badge)) item.badge else position?.heat?.takeIf { it.isNotBlank() } ?: item.badge.ifBlank { "查看剧集" }
+            val label=if(isCountBadge(item.badge)) item.badge else position?.heat?.takeIf { it.isNotBlank() } ?: item.badge.ifBlank { "未更新" }
             HomeScreen.Entry(item,label,rank=position?.rank)
         }
         val cw=homeCardWidth()
@@ -1247,6 +1247,7 @@ class MainActivity: Activity() {
         Toast.makeText(this,"正在查找其他季…",Toast.LENGTH_SHORT).show()
         work({
             // 建议接口 + App/网页搜索前两页 + 按缺失季号补搜，与搜索页共用同一套实现
+            // （索引里只有剧名、没有集数的词条在 searchSuggestSeries 里已经丢掉，这里不用再过滤）
             Seasons.pick(base,current.id,current.title,repository.searchSeasonFamily(base,Seasons.currentSeason(base,current.title)))
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }

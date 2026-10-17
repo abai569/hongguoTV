@@ -201,17 +201,20 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val data=JSONObject(text(url))
         val arr=data.optJSONArray("suggest_list") ?: data.optJSONObject("data")?.optJSONArray("suggest_list") ?: return emptyList()
         val rows=arr.objects().mapNotNull { row ->
-            val video=row.optJSONObject("video_data")
             // 只收正式剧名条目：纠错联想/聚合词（word_type=title、common_query）不是剧集，标题里却常含查询词
             val kind=row.str("word_type")
             if(kind.isNotEmpty() && kind!="short_play_name") return@mapNotNull null
-            val id=row.str("keyword").ifEmpty { video?.str("series_id").orEmpty() }
-            val title=row.str("name").ifEmpty { video?.str("title").orEmpty() }
+            // 没有 video_data 的只是搜索索引里的一条词条（点开才知道是哪一季），不是剧集结果，取回来就丢掉
+            val video=row.optJSONObject("video_data") ?: return@mapNotNull null
+            val id=row.str("keyword").ifEmpty { video.str("series_id") }
+            val title=row.str("name").ifEmpty { video.str("title") }
             if(id.isBlank() || title.isBlank()) return@mapNotNull null
-            val episodes=video?.optInt("episode_cnt") ?: 0
-            val tags=video?.optJSONArray("category_list") ?: JSONArray()
-            Series(id,title,cleanUrl(video?.str("series_cover").orEmpty()),video?.str("series_intro").orEmpty(),
-                video?.str("episode_right_text").orEmpty().ifEmpty { if(episodes>0) "全 $episodes 集" else "" },
+            val episodes=video.optInt("episode_cnt") ?: 0
+            // 没集数说明这一季还没更新（0 集），没有「全 N 集」可显示，不当作搜索结果
+            val badge=video.str("episode_right_text").ifEmpty { if(episodes>0) "全 $episodes 集" else "" }
+            if(badge.isBlank()) return@mapNotNull null
+            val tags=video.optJSONArray("category_list") ?: JSONArray()
+            Series(id,title,cleanUrl(video.str("series_cover")),video.str("series_intro"),badge,
                 (0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
         }
         return valid(rows).filter { Seasons.matchesQuery(query,it.title) }

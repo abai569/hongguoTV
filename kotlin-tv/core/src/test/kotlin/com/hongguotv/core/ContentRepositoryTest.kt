@@ -439,4 +439,26 @@ class ContentRepositoryTest {
         }
         assertEquals(listOf("444","111","222","333"),repo.searchAll("合成测试剧",1).items.map { it.id })
     }
+
+    @Test fun searchDropsSeasonsWithoutEpisodeCount() {
+        // 建议接口里只有剧名、没有集数的季（弹窗里只能显示「· 查看剧集」）不进结果
+        val rows=JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","111").put("title","合成测试剧").put("episode_cnt",8))))
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) """{"suggest_list":[{"word_type":"short_play_name","name":"合成测试剧第二季","keyword":"222"},{"word_type":"short_play_name","name":"合成测试剧第三季","keyword":"333","video_data":{"episode_right_text":"全20集"}}]}"""
+            else JSONObject().put("code",0).put("search_tabs",JSONArray()
+                .put(JSONObject().put("tab_type",11).put("has_more",false).put("data",rows))).toString()
+        }
+        assertEquals(listOf("111","333"),repo.searchAll("合成测试剧",1).items.map { it.id })
+    }
+
+    @Test fun searchKeepsResultsWhenNoEpisodeCountIsKnown() {
+        // 全都拿不到集数时不能把结果清空，否则会误报「没有找到相关结果」
+        val rows=JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","555").put("title","合成测试剧第二季"))))
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) """{"suggest_list":[]}"""
+            else JSONObject().put("code",0).put("search_tabs",JSONArray()
+                .put(JSONObject().put("tab_type",11).put("has_more",false).put("data",rows))).toString()
+        }
+        assertEquals(listOf("555"),repo.searchAll("合成测试剧",1).items.map { it.id })
+    }
 }
