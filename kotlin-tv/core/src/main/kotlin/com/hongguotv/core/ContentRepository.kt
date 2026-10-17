@@ -155,18 +155,30 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         return CatalogPage(valid(list).filter { Seasons.matchesQuery(keyword,it.title) },tab.optBoolean("has_more",false) && page<100)
     }
     fun searchAll(keyword: String, page: Int = 1): CatalogPage {
-        val short=runCatching { search(keyword,page,ContentType.SHORT) }.getOrElse { CatalogPage(emptyList(),false) }
-        val comic=runCatching { search(keyword,page,ContentType.COMIC) }.getOrElse { CatalogPage(emptyList(),false) }
-        // App 与网页搜索都会漏季（例如「万妖图录传第二季」），第一页再并入搜索建议里的同系列剧集
-        val aliases=if(page==1) runCatching { searchSuggestSeries(keyword,20) }.getOrDefault(emptyList()) else emptyList()
-        val merged=(short.items+comic.items+aliases).distinctBy { it.id }
-        // 建议接口拿整部剧的完整剧名去问只会回当前季，兄弟季要按季号逐季补搜；只在首页、查询像剧名且结果很少时补，避免拖慢普通搜索
+        // 搜索一页看全：源搜索是先分页后按标题过滤，翻页基本是空页，这里直接把前两页合并去重后一次列出
+        val collected=LinkedHashMap<String,Series>()
+        var answered=false
+        for(sourcePage in 1..2) {
+            var more=false
+            for(type in listOf(ContentType.SHORT,ContentType.COMIC)) {
+                val result=runCatching { search(keyword,sourcePage,type) }.getOrNull() ?: continue
+                answered=true
+                result.items.forEach { collected[it.id]=it }
+                more=more || result.hasMore
+            }
+            if(!more) break
+        }
+        val aliases=runCatching { searchSuggestSeries(keyword,20) }.getOrDefault(emptyList())
+        if(aliases.isNotEmpty()) answered=true
+        aliases.forEach { collected[it.id]=it }
+        // 搜索接口只回当前季，兄弟季要靠「建议接口 + 前两页 + 逐季补搜」凑齐；只在查询像剧名且结果很少时补，避免拖慢普通搜索
         val base=Seasons.base(keyword)
         val titleLike=base.length>=4 && base.any { it.code>0x7f }
-        val extras=if(page==1 && titleLike && merged.size<=5) runCatching { searchMissingSeasons(base,Seasons.currentSeason(base,keyword),merged) }.getOrDefault(emptyList()) else emptyList()
-        val items=(merged+extras).distinctBy { it.id }
-        if(items.isEmpty() && !short.hasMore && !comic.hasMore) throw IOException("Search unavailable")
-        return CatalogPage(items,short.hasMore || comic.hasMore)
+        val family=if(titleLike && collected.size<=5) runCatching { searchSeasonFamily(base,Seasons.currentSeason(base,keyword),collected.values) }.getOrDefault(emptyList()) else emptyList()
+        val items=(collected.values+family).distinctBy { it.id }
+        // 一次都没请求成功才算搜索不可用；接口正常但没有结果时返回空列表，让界面显示「没有找到相关结果」
+        if(items.isEmpty() && !answered) throw IOException("Search unavailable")
+        return CatalogPage(items,false)
     }
     fun searchSuggest(keyword: String,count: Int=10): List<String> {
         val query=keyword.trim()
@@ -204,32 +216,43 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         return valid(rows).filter { Seasons.matchesQuery(query,it.title) }
     }
     /**
-     * 同名剧的其他季：建议接口拿「整部剧完整剧名」去问时只回当前季，兄弟季要靠「剧名 第X季」逐季问出来。
-     * known 是已经拿到的候选，skipSeason 是正在看/正在搜的那一季（不用再探测），budget 是补搜请求上限。
-     * 只返回 known 之外、且与剧名同族的条目。
+     * 同名剧的全部季：建议接口 + App/网页搜索前两页 + 按缺失季号逐季补搜。
+     * 搜索页与「查找其他季」共用这一套，保证两边列出来的季一致；
+     * skipSeason 是正在看/正在搜的那一季（不用再探测），budget 是补搜请求上限，known 是调用方已经拿到的候选。
      */
-    fun searchMissingSeasons(baseTitle: String, skipSeason: Int, known: Collection<Series>, budget: Int = 12): List<Series> {
+    fun searchSeasonFamily(baseTitle: String, skipSeason: Int, known: Collection<Series> = emptyList(), budget: Int = 12): List<Series> {
         val base=Seasons.base(baseTitle).trim()
         val normBase=Seasons.norm(base)
-        if(base.isEmpty() || normBase.isEmpty() || budget<=0) return emptyList()
+        if(base.isEmpty() || normBase.isEmpty()) return known.toList()
         val rows=LinkedHashMap<String,Series>()
         known.forEach { rows[it.id]=it }
-        val arabic=rows.values.any { Regex("第[0-9]").containsMatchIn(it.title) }
-        val highest=rows.values.mapNotNull { Seasons.number(it.title).takeIf { n -> n>0 } }.maxOrNull() ?: 0
-        val upper=(maxOf(highest,skipSeason,6)+2).coerceAtMost(40)
-        var probes=budget
-        for(season in 1..upper) {
-            if(probes<=0) break
-            if(season==skipSeason || rows.values.any { Seasons.number(it.title)==season }) continue
-            for(spelling in if(arabic) listOf(season.toString(),Seasons.numeral(season)) else listOf(Seasons.numeral(season),season.toString())) {
-                if(probes<=0 || rows.values.any { Seasons.number(it.title)==season }) break
-                probes--
-                val query=if(season==1) base else "$base 第${spelling}季"
-                runCatching { searchSuggestSeries(query,8) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
+        runCatching { searchSuggestSeries(base,20) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
+        for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
+            var page=1
+            while(page<=2) {
+                val result=runCatching { search(base,page,type) }.getOrNull() ?: break
+                result.items.forEach { rows[it.id]=it }
+                if(!result.hasMore) break
+                page++
             }
         }
-        val found=known.map { it.id }.toSet()
-        return rows.values.filter { it.id !in found && Seasons.norm(it.title).contains(normBase) }
+        if(budget>0) {
+            val arabic=rows.values.any { Regex("第[0-9]").containsMatchIn(it.title) }
+            val highest=rows.values.mapNotNull { Seasons.number(it.title).takeIf { n -> n>0 } }.maxOrNull() ?: 0
+            val upper=(maxOf(highest,skipSeason,6)+4).coerceAtMost(40)
+            var probes=budget
+            for(season in 1..upper) {
+                if(probes<=0) break
+                if(season==skipSeason || rows.values.any { Seasons.number(it.title)==season }) continue
+                for(spelling in if(arabic) listOf(season.toString(),Seasons.numeral(season)) else listOf(Seasons.numeral(season),season.toString())) {
+                    if(probes<=0 || rows.values.any { Seasons.number(it.title)==season }) break
+                    probes--
+                    val query=if(season==1) base else "$base 第${spelling}季"
+                    runCatching { searchSuggestSeries(query,8) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
+                }
+            }
+        }
+        return rows.values.filter { Seasons.norm(it.title).contains(normBase) }
     }
     private fun isInitialsQuery(value: String) = value.trim().matches(Regex("[A-Za-z0-9]{2,20}"))
     fun searchSuggestRaw(keyword: String): String {

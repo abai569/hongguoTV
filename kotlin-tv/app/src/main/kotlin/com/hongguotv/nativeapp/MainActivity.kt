@@ -820,7 +820,8 @@ class MainActivity: Activity() {
         }
         val paging=row(); paging.gravity=Gravity.CENTER
         var prev: View?=null; var next: View?=null
-        if(tab<=2 || localCatalog()) {
+        // 搜索结果一页看全，不再给搜索页加翻页按钮
+        if(tab!=1 && (tab<=2 || localCatalog())) {
             prev=addButton(paging,"上一页") { if(page>1) { page--; catalogFocus=""; showCatalog(!localCatalog()) } }.apply { isEnabled=page>1; isFocusable=page>1; alpha=if(page>1) 1f else .4f }
             paging.addView(text(if(localCatalog()) "第 $page / ${maxOf(1,(catalog.size+pageSize-1)/pageSize)} 页" else if(showRank && ranking!=null) "第 $page / ${ranking!!.totalPages} 页" else "第 $page 页",14f,muted).apply { gravity=Gravity.CENTER },lp(dp(if(showRank) 135 else 95),dp(44)))
             next=addButton(paging,"下一页") { if(hasMore) { page++; catalogFocus=""; showCatalog(!localCatalog()) } }.apply { isEnabled=hasMore; isFocusable=hasMore; alpha=if(hasMore) 1f else .4f }
@@ -1208,22 +1209,8 @@ class MainActivity: Activity() {
         val base=Seasons.base(current.title)
         Toast.makeText(this,"正在查找其他季…",Toast.LENGTH_SHORT).show()
         work({
-            val rows=LinkedHashMap<String,Series>()
-            // 搜索建议接口一次就给出整部剧的所有季（含季名、集数、简介），App/网页搜索都会漏掉几季
-            runCatching { repository.searchSuggestSeries(base,20) }.getOrDefault(emptyList()).forEach { rows[it.id]=it }
-            for(type in listOf(ContentType.COMIC,ContentType.SHORT)) {
-                var page=1
-                while(page<=2) {
-                    val r=runCatching { repository.search(base,page,type) }.getOrNull() ?: break
-                    r.items.forEach { rows[it.id]=it }
-                    if(!r.hasMore) break
-                    page++
-                }
-            }
-            // suggestion 服务端封顶 20 条：季数超过 20 的剧会缺口，按缺失季号再问一次（与搜索页共用同一套补搜，预算 12 次）
-            runCatching { repository.searchMissingSeasons(base,Seasons.currentSeason(base,current.title),rows.values) }
-                .getOrDefault(emptyList()).forEach { rows[it.id]=it }
-            Seasons.pick(base,current.id,current.title,rows.values.toList())
+            // 建议接口 + App/网页搜索前两页 + 按缺失季号补搜，与搜索页共用同一套实现
+            Seasons.pick(base,current.id,current.title,repository.searchSeasonFamily(base,Seasons.currentSeason(base,current.title)))
         }, { list ->
             if(list.isEmpty()) { Toast.makeText(this,"未找到其他季（按剧名匹配）",Toast.LENGTH_LONG).show(); return@work }
             val labels=list.map { Seasons.label(base,it.title,it.badge) }

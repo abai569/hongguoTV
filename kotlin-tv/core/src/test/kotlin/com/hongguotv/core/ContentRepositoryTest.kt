@@ -395,4 +395,34 @@ class ContentRepositoryTest {
         assertEquals(8,repo.searchAll("合成测试剧",1).items.size)
         assertEquals(0,probes)
     }
+
+    @Test fun searchSeasonFamilyReadsSecondSourcePage() {
+        var searches=0
+        val firstPage=JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","111").put("title","合成测试剧第一季").put("episode_cnt",10))))
+        val secondPage=JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","222").put("title","合成测试剧第二季").put("episode_cnt",20))))
+        fun tabs(data: JSONArray,hasMore: Boolean)=JSONObject().put("code",0).put("search_tabs",JSONArray()
+            .put(JSONObject().put("tab_type",11).put("has_more",hasMore).put("data",data))
+            .put(JSONObject().put("tab_type",19).put("has_more",hasMore).put("data",data))).toString()
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) """{"suggest_list":[]}"""
+            else { searches++; if(searches==1) tabs(firstPage,true) else tabs(secondPage,false) }
+        }
+        val family=repo.searchSeasonFamily("合成测试剧",1)
+        assertEquals(listOf("111","222"),family.map { it.id })
+        assertTrue("补搜种子应读到源搜索第 2 页",searches>=2)
+    }
+
+    @Test fun searchShowsEverythingInOnePage() {
+        val rows=JSONArray().put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id","1").put("title","末世靠山王第一季").put("episode_cnt",67))))
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) """{"suggest_list":[]}"""
+            else JSONObject().put("code",0).put("search_tabs",JSONArray()
+                .put(JSONObject().put("tab_type",11).put("has_more",true).put("data",rows))
+                .put(JSONObject().put("tab_type",19).put("has_more",true).put("data",rows))).toString()
+        }
+        val first=repo.searchAll("末世靠山王",1)
+        assertEquals(1,first.items.size)
+        assertFalse("搜索不再分页",first.hasMore)
+        assertEquals(1,repo.searchAll("末世靠山王",3).items.size)
+    }
 }
