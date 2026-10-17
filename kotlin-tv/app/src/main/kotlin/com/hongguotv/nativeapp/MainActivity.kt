@@ -583,9 +583,15 @@ class MainActivity: Activity() {
         if(tab==1 && query.isNotBlank()) {
             val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
             head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
-            // 目录显示方式：网格 / 列表（列表模式剧名完整显示，不截断）
-            addButton(head,if(library.listView) "切换网格" else "切换列表") { library.listView=!library.listView; catalogFocus=""; showCatalog() }
-                .apply { (layoutParams as LinearLayout.LayoutParams).leftMargin=dp(12) }
+            // 目录显示方式切换：图标表示点下去会切到的模式（列表 ↔ 网格）
+            val toggle=ImageView(this).apply {
+                setImageResource(if(library.listView) R.drawable.ic_view_grid else R.drawable.ic_view_list)
+                contentDescription=if(library.listView) "切换为网格视图" else "切换为列表视图"
+                setPadding(dp(10),dp(10),dp(10),dp(10)); minimumHeight=dp(if(isTvDevice) 42 else 48)
+                focusStyle(this)
+                setOnClickListener { library.listView=!library.listView; catalogFocus=""; showCatalog() }
+            }
+            head.addView(toggle,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8); leftMargin=dp(12) })
             container.addView(head)
         } else if(tab==1) {
             // 每次进入搜索输入态都从空框开始，旧关键词只留在「历史」里，不接在上次的关键词后面继续输入
@@ -794,18 +800,21 @@ class MainActivity: Activity() {
         val fullWidth=(resources.displayMetrics.widthPixels*.9f).toInt()
         val width=if(listMode) fullWidth else ((fullWidth-gap*(count-1))/count).toInt()
         val posterWidth=if(BuildConfig.CHANNEL=="phone") dp(96) else dp(168)
+        val posterHeight=(posterWidth/TvStyle.POSTER_ASPECT).toInt()
+        // 列表行高写死：封面高 + 上下内边距，不随标题行数变化
+        val listRowHeight=posterHeight+dp(16)
         displayed.chunked(count).forEach { items ->
             val line=row(); line.gravity=if(listMode) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
             items.forEachIndexed { columnIndex,item ->
-                val card=column(); card.setPadding(dp(4),dp(4),dp(4),dp(9)); focusStyle(card); card.contentDescription=item.title; card.tag=item.id; catalogCards[item.id]=card
+                // 列表模式：卡片本身是横向行（封面 + 信息列），高度固定
+                val card=if(listMode) row().apply { gravity=Gravity.CENTER_VERTICAL } else column()
+                card.setPadding(dp(4),dp(4),dp(4),dp(9)); focusStyle(card); card.contentDescription=item.title; card.tag=item.id; catalogCards[item.id]=card
                 val position=if(showRank) ranking?.positions?.get(item.id) else null
                 val artwork=FrameLayout(this)
                 val info=if(listMode) column().apply { setPadding(dp(12),0,0,0) } else null
                 if(info!=null) {
-                    val holder=row().apply { gravity=Gravity.CENTER_VERTICAL }
-                    holder.addView(artwork,lp(posterWidth,(posterWidth/TvStyle.POSTER_ASPECT).toInt()))
-                    holder.addView(info,lp(0,-2).apply { weight=1f })
-                    card.addView(holder,lp(-1,-2))
+                    card.addView(artwork,lp(posterWidth,posterHeight))
+                    card.addView(info,lp(0,-1).apply { weight=1f })
                 } else card.addView(artwork,lp(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                 val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }; artwork.addView(image,FrameLayout.LayoutParams(-1,-1)); loadCover(image,item.cover); cardImages[item.id]=image to item.cover
                 if(showRank) {
@@ -832,8 +841,8 @@ class MainActivity: Activity() {
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
                 card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
                 card.setOnFocusChangeListener { _,focused -> TvStyle.animateFocus(card,focused); if(focused) { catalogFocus=item.id; loadCover(image,item.cover); preview?.show(item,selectionStatus(item)) } }
-                // The row measures its tallest card, then stretches siblings to keep badges aligned.
-                line.addView(card,lp(width,-1).apply { if(columnIndex<count-1) rightMargin=gap }); cards+=card
+                // 网格：行高取最高卡片、兄弟姐妹拉伸对齐徽章；列表：行高写死为封面高+内边距
+                line.addView(card,if(listMode) lp(width,listRowHeight) else lp(width,-1).apply { if(columnIndex<count-1) rightMargin=gap }); cards+=card
             }
             list.addView(line,lp(-1,-2).apply { bottomMargin=dp(10) })
         }
