@@ -61,6 +61,8 @@ object Seasons {
         if(n>0) return n
         return if(norm(currentTitle)==norm(baseTitle)) 1 else 0
     }
+    /** 「查找其他季」与搜索结果共用的排序：先按季号（没有季号的排最前），再按标题。 */
+    fun order(baseTitle: String,rows: List<Series>): List<Series> = rows.sortedWith(compareBy({ of(baseTitle,it.title) }, { it.title }))
     fun pick(baseTitle: String,currentId: String,currentTitle: String,rows: List<Series>): List<Series> {
         val nb=norm(baseTitle)
         val candidates=rows.filter { it.id!=currentId && nb.isNotEmpty() && norm(it.title).contains(nb) }

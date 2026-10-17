@@ -425,4 +425,18 @@ class ContentRepositoryTest {
         assertFalse("搜索不再分页",first.hasMore)
         assertEquals(1,repo.searchAll("末世靠山王",3).items.size)
     }
+
+    @Test fun searchResultsOrderSeasonsByNumber() {
+        val rows=JSONArray()
+        listOf("222" to "合成测试剧第二季","333" to "合成测试剧第十季","111" to "合成测试剧第一季","444" to "合成测试剧").forEach { (id,title) ->
+            rows.put(JSONObject().put("video_data",JSONArray().put(JSONObject().put("series_id",id).put("title",title).put("episode_cnt",10))))
+        }
+        val repo=repository { request ->
+            if(request.url.encodedPath.contains("incent_resource/suggestion")) """{"suggest_list":[]}"""
+            else JSONObject().put("code",0).put("search_tabs",JSONArray()
+                .put(JSONObject().put("tab_type",11).put("has_more",false).put("data",rows))
+                .put(JSONObject().put("tab_type",19).put("has_more",false).put("data",rows))).toString()
+        }
+        assertEquals(listOf("444","111","222","333"),repo.searchAll("合成测试剧",1).items.map { it.id })
+    }
 }

@@ -68,6 +68,8 @@ class MainActivity: Activity() {
     private var collectionRank: RankType?=null
     private var homeRank: List<Pair<RankType, CatalogPage>> = emptyList()
     private val pageSize=20
+    /** 非本地目录（搜索/榜单/收藏等）一次最多画多少张卡；搜索页的「共 N 条」按同一口径显示。 */
+    private val catalogViewCap=30
     private var catalogScroll: ScrollView?=null
     private var catalogBody: LinearLayout?=null
     private var homePosition: HomeScreen.Position?=null
@@ -582,7 +584,9 @@ class MainActivity: Activity() {
         var searchPanelShown=false
         if(tab==1 && query.isNotBlank()) {
             val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
-            head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
+            head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=2; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
+            // 条数按屏幕能看到的数量算（网格/列表一次最多画 catalogViewCap 张），避免「共 60 条」却只有 30 张
+            if(catalog.isNotEmpty()) head.addView(text("共 ${minOf(catalog.size,catalogViewCap)} 条",13f,muted).apply { setPadding(dp(8),0,dp(6),0) })
             // 目录显示方式切换：图标表示点下去会切到的模式（列表 ↔ 网格）
             val toggle=ImageView(this).apply {
                 setImageResource(if(library.listView) R.drawable.ic_view_grid else R.drawable.ic_view_list)
@@ -783,7 +787,7 @@ class MainActivity: Activity() {
         val scroll=SmoothScrollView(this).apply { isFillViewport=false }; catalogScroll=scroll
         val list=column(); scroll.addView(list); body.addView(scroll,lp(-1,0).apply { weight=1f })
         var restoringScroll=true
-        val displayed=if(localCatalog()) catalog.drop((page-1)*pageSize).take(pageSize) else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog.take(30)
+        val displayed=if(localCatalog()) catalog.drop((page-1)*pageSize).take(pageSize) else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog.take(catalogViewCap)
         if(displayed.isEmpty()) {
             val empty=when(tab) { 1 -> if(query.isBlank()) "" else "没有找到相关结果，换个关键词试试"; 3 -> "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; else -> "本页没有更多内容" }
             if(empty.isNotBlank()) message(list,if(loading) "正在加载推荐…" else empty)

@@ -175,7 +175,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val base=Seasons.base(keyword)
         val titleLike=base.length>=4 && base.any { it.code>0x7f }
         val family=if(titleLike && collected.size<=5) runCatching { searchSeasonFamily(base,Seasons.currentSeason(base,keyword),collected.values) }.getOrDefault(emptyList()) else emptyList()
-        val items=(collected.values+family).distinctBy { it.id }
+        // 和「查找其他季」同一套排序：先季号、再标题
+        val items=Seasons.order(base,(collected.values+family).distinctBy { it.id })
         // 一次都没请求成功才算搜索不可用；接口正常但没有结果时返回空列表，让界面显示「没有找到相关结果」
         if(items.isEmpty() && !answered) throw IOException("Search unavailable")
         return CatalogPage(items,false)
