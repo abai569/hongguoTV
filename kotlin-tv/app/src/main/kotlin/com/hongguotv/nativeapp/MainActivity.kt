@@ -583,7 +583,9 @@ class MainActivity: Activity() {
         if(tab==1 && query.isNotBlank()) {
             val head=row().apply { setPadding(0,dp(8),0,dp(6)) }
             head.addView(text("搜索：$query",22f).apply { setTypeface(null,Typeface.BOLD); maxLines=1; ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
-            head.addView(text("按返回键重新搜索",12f,muted))
+            // 目录显示方式：网格 / 列表（列表模式剧名完整显示，不截断）
+            addButton(head,if(library.listView) "切换网格" else "切换列表") { library.listView=!library.listView; catalogFocus=""; showCatalog() }
+                .apply { (layoutParams as LinearLayout.LayoutParams).leftMargin=dp(12) }
             container.addView(head)
         } else if(tab==1) {
             // 每次进入搜索输入态都从空框开始，旧关键词只留在「历史」里，不接在上次的关键词后面继续输入
@@ -788,13 +790,23 @@ class MainActivity: Activity() {
             if(focusType) typeButtons[library.contentType]?.requestFocus() else if(collectionBack!=null && !focusNav) collectionBack?.requestFocus() else if(focusNav || resumeCards.isEmpty()) nav[tab].requestFocus() else resumeCards.first().requestFocus()
             return
         }
-        val cards=mutableListOf<View>(); val count=columns(); val gap=dp(14); val width=((resources.displayMetrics.widthPixels*.9f-gap*(count-1))/count).toInt()
+        val cards=mutableListOf<View>(); val listMode=library.listView; val count=if(listMode) 1 else columns(); val gap=dp(14)
+        val fullWidth=(resources.displayMetrics.widthPixels*.9f).toInt()
+        val width=if(listMode) fullWidth else ((fullWidth-gap*(count-1))/count).toInt()
+        val posterWidth=if(BuildConfig.CHANNEL=="phone") dp(96) else dp(168)
         displayed.chunked(count).forEach { items ->
-            val line=row(); line.gravity=Gravity.TOP
+            val line=row(); line.gravity=if(listMode) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
             items.forEachIndexed { columnIndex,item ->
                 val card=column(); card.setPadding(dp(4),dp(4),dp(4),dp(9)); focusStyle(card); card.contentDescription=item.title; card.tag=item.id; catalogCards[item.id]=card
                 val position=if(showRank) ranking?.positions?.get(item.id) else null
-                val artwork=FrameLayout(this); card.addView(artwork,lp(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
+                val artwork=FrameLayout(this)
+                val info=if(listMode) column().apply { setPadding(dp(12),0,0,0) } else null
+                if(info!=null) {
+                    val holder=row().apply { gravity=Gravity.CENTER_VERTICAL }
+                    holder.addView(artwork,lp(posterWidth,(posterWidth/TvStyle.POSTER_ASPECT).toInt()))
+                    holder.addView(info,lp(0,-2).apply { weight=1f })
+                    card.addView(holder,lp(-1,-2))
+                } else card.addView(artwork,lp(-1,((width-dp(8))/TvStyle.POSTER_ASPECT).toInt()))
                 val image=ImageView(this).apply { scaleType=ImageView.ScaleType.FIT_CENTER; importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }; artwork.addView(image,FrameLayout.LayoutParams(-1,-1)); loadCover(image,item.cover); cardImages[item.id]=image to item.cover
                 if(showRank) {
                     val rank=position?.rank
@@ -805,10 +817,17 @@ class MainActivity: Activity() {
                     artwork.addView(rankBadge,FrameLayout.LayoutParams(dp(24),dp(24)).apply { gravity=Gravity.TOP or Gravity.START; setMargins(dp(3),dp(3),dp(3),dp(3)) })
                     card.contentDescription=(if(rank!=null) "第 $rank 名，" else "")+item.title+(if(collectionRank!=null) "，"+item.badge else "，"+(position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"))
                 }
-                card.addView(text(item.title,14f).apply { maxLines=2; minLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) },lp(-1,-2).apply { weight=1f })
                 val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
-                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(showRank && collectionRank==null) position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,if(showRank && collectionRank==null || tab==3) accent else muted).apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) }
-                card.addView(badge,lp(-1,-2)); if(tab==3) favoriteBadges[item.id]=badge
+                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(showRank && collectionRank==null) position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无" else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,if(showRank && collectionRank==null || tab==3) accent else muted)
+                if(info!=null) {
+                    // 列表模式：剧名不设 maxLines / ellipsize，完整换行显示
+                    info.addView(text(item.title,16f),lp(-1,-2))
+                    info.addView(badge.apply { setPadding(0,dp(6),0,0) },lp(-1,-2))
+                } else {
+                    card.addView(text(item.title,14f).apply { maxLines=2; minLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),dp(7),dp(3),0) },lp(-1,-2).apply { weight=1f })
+                    card.addView(badge.apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(dp(3),0,0,0) },lp(-1,-2))
+                }
+                if(tab==3) favoriteBadges[item.id]=badge
                 card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
                 card.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_MENU) { if(event.action==KeyEvent.ACTION_UP) { catalogFocus=item.id; quickActions(item,card) }; true } else false }
@@ -1048,6 +1067,11 @@ class MainActivity: Activity() {
         defaultSpeed=setting(leftCol,"默认倍速  ·  ${PlaybackSpeed.label(library.playbackSpeed)}") { showSpeedPicker(defaultSpeed,false) }
         lateinit var frame: TextView
         frame=setting(leftCol,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
+        lateinit var layoutButton: TextView
+        layoutButton=setting(leftCol,"显示方式  ·  ${if(library.listView) "列表" else "网格"}") {
+            library.listView=!library.listView
+            layoutButton.text="显示方式  ·  ${if(library.listView) "列表" else "网格"}"
+        }
         lateinit var autoNextButton: TextView
         autoNextButton=setting(leftCol,"自动连播  ·  ${if(library.autoNext) "开启" else "关闭"}") {
             library.autoNext=!library.autoNext
